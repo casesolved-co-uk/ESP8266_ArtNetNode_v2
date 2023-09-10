@@ -497,6 +497,13 @@ bool ajaxSave(uint8_t page, JsonObject& json) {
       
       break;
 
+    case 8:     // Debug log
+      if ((bool)json["debugLogClear"]) {
+        return debugLogClear();
+      }
+      return true;
+      break;
+
     default:
       // Catch errors
       return false;
@@ -615,6 +622,7 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       break;
 
     case 3:     // IP Address & Node Name
+      jsonReply.remove("macAddress");
       jsonReply.remove("portAuni");
       jsonReply.remove("portBuni");
       jsonReply.remove("portAsACNuni");
@@ -637,6 +645,7 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       break;
 
     case 4:     // Port A
+      jsonReply.remove("macAddress");
       jsonReply.remove("ipAddress");
       jsonReply.remove("subAddress");
       jsonReply.remove("gwAddress");
@@ -670,6 +679,7 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       break;
 
     case 5:     // Port B
+      jsonReply.remove("macAddress");
       jsonReply.remove("ipAddress");
       jsonReply.remove("subAddress");
       jsonReply.remove("gwAddress");
@@ -697,6 +707,7 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       break;
 
     case 6:     // Scenes
+      jsonReply.remove("macAddress");
       jsonReply.remove("ipAddress");
       jsonReply.remove("subAddress");
       jsonReply.remove("gwAddress");
@@ -712,6 +723,7 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       break;
 
     case 7:     // Firmware
+      jsonReply.remove("macAddress");
       jsonReply.remove("ipAddress");
       jsonReply.remove("subAddress");
       jsonReply.remove("gwAddress");
@@ -726,7 +738,24 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       jsonReply["success"] = 1;
       break;
 
+    case 8:     // Debug log
+      jsonReply.remove("macAddress");
+      jsonReply.remove("ipAddress");
+      jsonReply.remove("subAddress");
+      jsonReply.remove("gwAddress");
+      jsonReply.remove("bcAddress");
+      jsonReply.remove("portAuni");
+      jsonReply.remove("portBuni");
+      jsonReply.remove("portAsACNuni");
+      jsonReply.remove("portBsACNuni");
+      jsonReply.remove("dmxInBroadcast");
+
+      jsonReply.set("debugLog", debugLogString());
+      jsonReply["success"] = 1;
+      break;
+
     default:
+      jsonReply.remove("macAddress");
       jsonReply.remove("ipAddress");
       jsonReply.remove("subAddress");
       jsonReply.remove("gwAddress");
@@ -741,4 +770,3 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       jsonReply["message"] = "Invalid or incomplete data received.";
   }
 }
-
