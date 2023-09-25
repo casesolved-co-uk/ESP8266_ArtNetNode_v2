@@ -267,84 +267,6 @@ void artStart() {
   yield();
 }
 
-void webStart() {
-  webServer.on("/", [](){
-    artRDM.pause();
-    webServer.send_P(200, typeHTML, mainPage);
-    webServer.sendHeader("Connection", "close");
-    yield();
-    artRDM.begin();
-  });
-  
-  webServer.on("/style.css", [](){
-    artRDM.pause();
-
-    File f = SPIFFS.open("/style.css", "r");
-
-    // If no style.css in SPIFFS, send default
-    if (!f)
-      webServer.send_P(200, typeCSS, css);
-    else
-      size_t sent = webServer.streamFile(f, typeCSS);
-    
-    f.close();
-    webServer.sendHeader("Connection", "close");
-    
-    yield();
-    artRDM.begin();
-  });
-  
-  webServer.on("/ajax", HTTP_POST, ajaxHandle);
-  
-  webServer.on("/upload", HTTP_POST, webFirmwareUpdate, webFirmwareUpload);
-
-  webServer.on("/style", [](){
-    webServer.send_P(200, typeHTML, cssUploadPage);
-    webServer.sendHeader("Connection", "close");
-  });
-  
-  webServer.on("/style_delete", [](){
-    if (SPIFFS.exists("/style.css"))
-      SPIFFS.remove("/style.css");
-        
-    webServer.send(200, "text/plain", "style.css deleted.  The default style is now in use.");
-    webServer.sendHeader("Connection", "close");
-  });
-
-  webServer.on("/style_upload", HTTP_POST, [](){
-    webServer.send(200, "text/plain", "Upload successful!");
-  }, [](){
-    HTTPUpload& upload = webServer.upload();
-    
-    if(upload.status == UPLOAD_FILE_START){
-      String filename = upload.filename;
-      if(!filename.startsWith("/")) filename = "/"+filename;
-      fsUploadFile = SPIFFS.open(filename, "w");
-      filename = String();
-      
-    } else if(upload.status == UPLOAD_FILE_WRITE){
-      if(fsUploadFile)
-        fsUploadFile.write(upload.buf, upload.currentSize);
-        
-    } else if(upload.status == UPLOAD_FILE_END){
-      if(fsUploadFile) {
-        fsUploadFile.close();
-        
-        if (upload.filename != "/style.css")
-          SPIFFS.rename(upload.filename, "/style.css");
-      }
-    }
-  });
-  
-  webServer.onNotFound([]() {
-    webServer.send(404, "text/plain", "Page not found");
-  });
-  
-  webServer.begin();
-  
-  yield();
-}
-
 void wifiStart() {
   // If it's the default WiFi SSID, make it unique
   if (strcmp(deviceSettings.hotspotSSID, "espArtNetNode") == 0 || deviceSettings.hotspotSSID[0] == '\0')
@@ -408,14 +330,11 @@ void startHotspot() {
   
   if (deviceSettings.standAloneEnable)
     return;
-  
-  webStart();
 
   unsigned long endTime = millis() + 30000;
 
   // Stay here if not in stand alone mode - no dmx or artnet
   while (endTime > millis() || wifi_softap_get_station_num() > 0) {
-    webServer.handleClient();
     yield();
   }
 

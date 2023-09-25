@@ -1,4 +1,8 @@
-
+/*
+ * Copyright (c) 2023, Richard Case
+ * 
+ * For storing a debug log in the SPIFFS
+ */
 
 #ifndef debugLog_h
 #define debugLog_h

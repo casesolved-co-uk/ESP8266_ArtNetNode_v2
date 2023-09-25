@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>
+			espArtNetNode CSS Upload
+		</title>
+	</head>
+	<body>
+		<p>
+			Select and upload your CSS file. This will overwrite any previous uploads but you can restore the default below.<br>
+			<br>
+		</p>
+		<form method='post' action='/style_upload' enctype='multipart/form-data'>
+			<input type='file' name='css'><input type='submit' value='Upload New CSS'>
+		</form>
+		<p>
+			<br>
+		</p><a href='/style_delete'>Restore default CSS</a>
+	</body>
+</html>

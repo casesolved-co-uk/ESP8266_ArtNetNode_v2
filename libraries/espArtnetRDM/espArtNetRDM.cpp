@@ -217,6 +217,7 @@ bool esp8266ArtNetRDM::closePort(uint8_t g, uint8_t p) {
   group->ports[p] = 0;
   group->numPorts--;
   group->ports[p] == 0;
+  return true;
 }
 
 void esp8266ArtNetRDM::setArtDMXCallback(artDMXCallBack callback) {
@@ -807,7 +808,7 @@ void esp8266ArtNetRDM::_artIPProgReply() {
 
   // Send packet
   eUDP.beginPacket(eUDP.remoteIP(), ARTNET_PORT);
-  int test = eUDP.write(ipProgReply,ARTNET_IP_PROG_REPLY_SIZE);
+  eUDP.write(ipProgReply,ARTNET_IP_PROG_REPLY_SIZE);
   eUDP.endPacket();
 }
 
@@ -955,6 +956,7 @@ void esp8266ArtNetRDM::_artAddress(unsigned char *_artBuffer) {
 }
 
 void esp8266ArtNetRDM::_artSync(unsigned char *_artBuffer) {
+  (void) _artBuffer;
   // Update sync timer
   _art->lastSync = millis();
   
@@ -1084,7 +1086,7 @@ void esp8266ArtNetRDM::artTODData(uint8_t g, uint8_t p, uint16_t* uidMan, uint32
 
     // Send packet
     eUDP.beginPacket(_art->broadcastIP, ARTNET_PORT);
-    int test = eUDP.write(artTodData,len);
+    eUDP.write(artTodData,len);
     eUDP.endPacket();
 
     if (uidTotal == 0)
@@ -1197,6 +1199,7 @@ void esp8266ArtNetRDM::rdmResponse(rdm_data* c, uint8_t g, uint8_t p) {
 }
 
 void esp8266ArtNetRDM::_artRDMSub(unsigned char *_artBuffer) {
+  (void) _artBuffer;
   //Serial.println("artRDMSub");
 }
 
@@ -1319,7 +1322,7 @@ char* esp8266ArtNetRDM::getLongName() {
   return _art->longName;
 }
 
-void esp8266ArtNetRDM::setNodeReport(char* c, uint16_t code) {
+void esp8266ArtNetRDM::setNodeReport(char const* c, uint16_t code) {
   if (_art == 0)
     return;
 

@@ -13,12 +13,12 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see http://www.gnu.org/licenses/
 */
 
-void ajaxHandle() {
-  JsonObject& json = jsonBuffer.parseObject(webServer.arg("plain"));
+AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/ajax", [](AsyncWebServerRequest *request, JsonVariant &jsin) {
+  JsonObject& json = jsin.as<JsonObject>();
   JsonObject& jsonReply = jsonBuffer.createObject();
-  
+
   String reply;
-  
+
   // Handle request to reboot into update mode
   if (json.containsKey("success") && json["success"] == 1 && json.containsKey("doUpdate")) {
     artRDM.end();
@@ -27,7 +27,7 @@ void ajaxHandle() {
     jsonReply["doUpdate"] = 1;
     
     jsonReply.printTo(reply);
-    webServer.send(200, "application/json", reply);
+    request->send(200, "application/json", reply);
 
     if (json["doUpdate"] == 1) {
       // Turn pixel strips off if they're on
@@ -68,8 +68,8 @@ void ajaxHandle() {
   } 
 
   jsonReply.printTo(reply);
-  webServer.send(200, "application/json", reply);
-}
+  request->send(200, "application/json", reply);
+});
 
 bool ajaxSave(uint8_t page, JsonObject& json) {
   // This is a load request, not a save
@@ -321,8 +321,8 @@ bool ajaxSave(uint8_t page, JsonObject& json) {
   
         eepromSave();
         return true;
+        break;
       }
-      break;
 
     case 5:     // Port B
       #ifndef ONE_PORT
@@ -482,9 +482,9 @@ bool ajaxSave(uint8_t page, JsonObject& json) {
   
         eepromSave();
         return true;
+        break;
       }
       #endif
-      break;
 
     case 6:     // Scenes
       // Not yet implemented
@@ -508,6 +508,7 @@ bool ajaxSave(uint8_t page, JsonObject& json) {
       // Catch errors
       return false;
   }
+  return false;
 }
 
 void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
@@ -522,6 +523,11 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
   JsonArray& portAsACNuni = jsonReply.createNestedArray("portAsACNuni");
   JsonArray& portBsACNuni = jsonReply.createNestedArray("portBsACNuni");
   JsonArray& dmxInBroadcast = jsonReply.createNestedArray("dmxInBroadcast");
+
+  // Debug
+  //char buf[40];
+  //sprintf(buf, "Loading page: %d", page);
+  //debugLog(LOG_DEBUG, "AJAX", buf);
 
   // Get MAC Address
   char MAC_char[30] = "";
@@ -739,18 +745,6 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       break;
 
     case 8:     // Debug log
-      jsonReply.remove("macAddress");
-      jsonReply.remove("ipAddress");
-      jsonReply.remove("subAddress");
-      jsonReply.remove("gwAddress");
-      jsonReply.remove("bcAddress");
-      jsonReply.remove("portAuni");
-      jsonReply.remove("portBuni");
-      jsonReply.remove("portAsACNuni");
-      jsonReply.remove("portBsACNuni");
-      jsonReply.remove("dmxInBroadcast");
-
-      jsonReply.set("debugLog", debugLogString());
       jsonReply["success"] = 1;
       break;
 
@@ -768,5 +762,6 @@ void ajaxLoad(uint8_t page, JsonObject& jsonReply) {
       
       jsonReply["success"] = 0;
       jsonReply["message"] = "Invalid or incomplete data received.";
+      break;
   }
 }
