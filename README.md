@@ -1,3 +1,21 @@
+## My updates
+Updated: 26 Sep 2023
+
+My updates and todos are listed in the espArtnetNode main file.
+All credit goes to Matthew Tong for this excellent project, his original info is retained below.
+
+I will be selling two types of 2-channel, XLR3, electrically and opto-isolated DMX boards based on Matthew's designs and compatible with this code:
+
+ - A less populated board suitable for a Wemos D1 mini module
+ - A more populated board with an ESP-12S module, FTDI FT232RL and USB-C port
+
+Other board options:
+
+ - Using the onboard FTDI chip, or a header, there is the option to either use it to program the ESP-12S module, or to drive DMX channel A directly, i.e. the board can also operate as a USB single channel isolated DMX interface without the ESP module
+ - 2-channel headers for one-wire addressable LED strips instead of DMX
+ - Protected 5V input for external PSU
+ - Optional 6.3-12V compatible filtered and protected input with 5V regulator
+
 # ESP8266_ArtNetNode_v2
 ESP8266 based WiFi ArtNet V4 to DMX, RDM and LED Pixels
 
