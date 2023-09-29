@@ -102,7 +102,7 @@
 						<p class="right"><input type="text" name="wifiPass"></p>
 						<p class="spacer"></p>
 						<p class="left">Hotspot SSID:</p>
-						<p class="right"><input type='text' name='hotspotSSID'></p>
+						<p class="right"><input type='text' name='hotspotSSID'>May be altered for uniqueness</p>
 						<p class="left">Password:</p>
 						<p class="right"><input type="text" name="hotspotPass"></p>
 						<p class="left">Start Delay:</p>
@@ -155,12 +155,7 @@
 						<h2>Port A Settings</h2>
 						<p class="left">Port Type:</p>
 						<p class="right">
-							<select class="select" name="portAmode">
-								<option value="0">DMX Output</option>
-								<option value="1">DMX Output with RDM</option>
-								<option value="2">DMX Input</option>
-								<option value="3">LED Pixels - WS2812</option>
-							</select>
+							<select id="portAmode" class="select" name="portAmode"><!-- Options from JS --></select>
 						</p>
 						<p class="left">Protocol:</p>
 						<p class="right">
@@ -208,6 +203,10 @@
 						<span name="portApix">
 							<p class="left">Number of Pixels:</p>
 							<p class="right"><input type="number" min="0" max="680" name="portAnumPix" class="number">680 max - 170 per universe</p>
+							<p class="left">Colour Correction:</p>
+							<p class="right"><input type="color" name="portAcorrection" value="#FFFFFF">See <a href="https://github.com/FastLED/FastLED/blob/master/src/color.h" target="_blank">FastLED color.h</a></p>
+							<p class="left">White Balance Temperature:</p>
+							<p class="right"><input type="color" name="portAtemp" value="#FFFFFF">See <a href="https://github.com/FastLED/FastLED/blob/master/src/color.h" target="_blank">FastLED color.h</a></p>
 							<p class="left">Mode:</p>
 							<p class="right">
 								<select class="select" name="portApixMode">
@@ -225,11 +224,7 @@
 						<h2>Port B Settings</h2>
 						<p class="left">Port Type:</p>
 						<p class="right">
-							<select class="select" name="portBmode">
-								<option value="0">DMX Output</option>
-								<option value="1">DMX Output with RDM</option>
-								<option value="3">LED Pixels - WS2812</option>
-							</select>
+							<select id="portBmode" class="select" name="portBmode"><!-- Options from JS --></select>
 						</p>
 						<p class="left">Protocol:</p>
 						<p class="right">
@@ -267,9 +262,11 @@
 						</p>
 						<span name="portBpix"></span>
 							<p class="left">Number of Pixels:</p>
-							<p class="right">
-								<input type="number" min="0" max="680" name="portBnumPix" class="number">680 max - 170 per universe
-							</p>
+							<p class="right"><input type="number" min="0" max="680" name="portBnumPix" class="number">680 max - 170 per universe</p>
+							<p class="left">Colour Correction:</p>
+							<p class="right"><input type="color" name="portBcorrection" value="#FFFFFF">See <a href="https://github.com/FastLED/FastLED/blob/master/src/color.h" target="_blank">FastLED color.h</a></p>
+							<p class="left">White Temperature:</p>
+							<p class="right"><input type="color" name="portBtemp" value="#FFFFFF">See <a href="https://github.com/FastLED/FastLED/blob/master/src/color.h" target="_blank">FastLED color.h</a></p>
 							<p class="left">Mode:</p>
 							<p class="right">
 								<select class="select" name="portBpixMode">

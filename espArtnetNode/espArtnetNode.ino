@@ -30,33 +30,45 @@ In order to recieve one, please complete one of the following tasks.  You can "w
 
 /* racitup additions:
   ESP8266 BSP URL: https://arduino.esp8266.com/stable/package_esp8266com_index.json
-  Due to code problems, ESP8266 BSP Version 2.4.1 is required which installs an older espressif8266 platform version. BSP v2.5.2 is latest supported on MACOS 10.11
-  Copy github repo libs to your sketch library and restart
-  Copy ESP8266 SPIFFS filesystem uploader to sketchbook tools folder & upload the SPIFFS webserver files (1M recommended for development)
+  Due to code problems, ESP8266 BSP Version 2.5.0 is required which installs an older espressif8266 platform version. BSP v2.5.2 is latest supported on MACOS 10.11
+  Copy github repo libs to your sketchbook library and restart
+  Copy ESP8266 SPIFFS filesystem uploader to sketchbook tools folder & upload the SPIFFS webserver files (1M size plenty for development)
   Copy source to a sketch folder named espArtnetNode
 
   * Debug log visible from website
-  * website code stored as SPIFFS static files and served by ESPAsyncWebServer
-  * [TODO] board config for single DMX port (ONE_PORT) over ajax for dynamic web page 
-  * [TODO] FASTLED library for all LED driving including options for all supported non-clocked LED types
-  * [TODO] Scene saving
+  * Memory usage logging
+  * Website code stored as SPIFFS static files and served by ESPAsyncWebServer
+  * Board config for single DMX port (ONE_PORT) over ajax for dynamic web page 
+  * [TODO] Website: Dynamically remove Port B, add status and max LED brightnesses
+  * FASTLED library for all LED driving including options for supported non-clocked LED types
+  * [TODO] Reimplement FX library for FastLED
+  * [TODO] Static scene saving
+  * [TODO] Chase scene recording and playback, hopefully with a fast RLE for compression
   * [TODO] Support BSP v2.5.2
-  * [TODO] Update to ArduinoJson v6
-  * [TODO] Fix all other reported issues
+  * Update to ArduinoJson v6
+  * Use json file as settings store instead of struct for sharing with website
+  * [TODO] Import other peoples' fixes
   * [TODO] Fix compile warnings
-  * [TODO] Redirect debug/exception logging to file
+  * Redirect debug/exception logging to debug log - doesn't seem to work?
+  * [TODO] Restyle with bootstrap
+  * [TODO v2] Support clocked LED strip types over single SPI bus
 
   Artnet 2CH DMX board supported ESP8266 boards: Wemos D1 mini (User supplied) or Generic ESP8266 module (ESP-12S pre-populated)
 */
+// required by ESPAsyncWebServer for ArduinoJson v6 compatibility
+#define DYNAMIC_JSON_DOCUMENT_SIZE 512
+//#define ARDUINOJSON_ENABLE_STD_STRING 1
+//#define ARDUINOJSON_ENABLE_ARDUINO_STRING 0
 
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebSrv.h>
 #include <AsyncJson.h>
-#include <ArduinoJson.h>   // external library; version 5 required for DynamicJsonBuffer
+#include <ArduinoJson.h> // v6
 #include <EEPROM.h>
 #include <FS.h>
+#include <FastLED.h>
 #include "store.h"
 #include "espDMX_RDM.h"
 #include "espArtNetRDM.h"
@@ -69,7 +81,7 @@ extern "C" {
   extern struct rst_info resetInfo;
 }
 
-#define FIRMWARE_VERSION "v2.1.0"
+const char* FIRMWARE_VERSION = "v2.1.0";
 #define ART_FIRM_VERSION 0x0210   // Firmware given over Artnet (2 bytes)
 
 
@@ -99,11 +111,12 @@ extern "C" {
   #define DMX_TX_B 2
 
   #define STATUS_LED_PIN 12
-  #define STATUS_LED_MODE_WS2812
-//  #define STATUS_LED_MODE_APA106
+  #define STATUS_LED_MODE WS2812B
+//  #define STATUS_LED_MODE APA106
   #define STATUS_LED_A 0  // Physical wiring order for status LEDs
   #define STATUS_LED_B 1
   #define STATUS_LED_S 2
+  #define NUM_STATUS_LEDS 3
   
   #define WS2812_ALLOW_INT_SINGLE false
   #define WS2812_ALLOW_INT_DOUBLE false
@@ -113,36 +126,39 @@ extern "C" {
   #define SETTINGS_RESET 14
 #endif
 
+//#define STATUS_DIM 0x0F
 
-// Definitions for status leds  xxBBRRGG
-#define BLACK 0x00000000
-#define WHITE 0x00FFFFFF
-#define RED 0x0000FF00
-#define GREEN 0x000000FF
-#define BLUE 0x00FF0000
-#define CYAN 0x00FF00FF
-#define PINK 0x0066FF22
-#define MAGENTA 0x00FFFF00
-#define YELLOW 0x0000FFFF
-#define ORANGE 0x0000FF33
-#define STATUS_DIM 0x0F
-
+// used to store artRDM values in startFunctions:
 uint8_t portA[5], portB[5];
 uint8_t MAC_array[6];
+IPAddress ip;
+IPAddress subnet;
+IPAddress gateway;
+IPAddress broadcast;
+IPAddress dmxBroadcast;
+
+espDMX dmxA(0);
+espDMX dmxB(1);
+
 uint8_t dmxInSeqID = 0;
-uint8_t statusLedData[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 uint32_t statusTimer = 0;
 
 esp8266ArtNetRDM artRDM;
 AsyncWebServer webServer(80);
-DynamicJsonBuffer jsonBuffer;
-ws2812Driver pixDriver;
+// see store.h
+DynamicJsonDocument deviceSettings(CONFIG_SIZE);
 File fsUploadFile;
-bool statusLedsDim = true;
-bool statusLedsOff = false;
 
+uint32_t portAcorrect, portBcorrect, portAtemperature, portBtemperature;
+
+// #### REMOVE ?
+//bool statusLedsDim = true;
+//bool statusLedsOff = false;
+ws2812Driver pixDriver;
 pixPatterns pixFXA(0, &pixDriver);
 pixPatterns pixFXB(1, &pixDriver);
+
+bool pixDone = true;  // signals output of LEDs
 
 char wifiStatus[60] = "";
 bool isHotspot = false;
@@ -150,29 +166,25 @@ uint32_t nextNodeReport = 0;
 char nodeError[ARTNET_NODE_REPORT_LENGTH] = "";
 bool nodeErrorShowing = 1;
 uint32_t nodeErrorTimeout = 0;
-bool pixDone = true;
 bool newDmxIn = false;
 bool doReboot = false;
 byte* dataIn;
+char* stack_start;
 
 void setup(void) {
+  // for meminfo
+  char stack;
+  stack_start = &stack;
+
   //pinMode(4, OUTPUT);
   //digitalWrite(4, LOW);
 
-  // Make direction input to avoid boot garbage being sent out
+  // Make direction output to avoid boot garbage being sent out
   pinMode(DMX_DIR_A, OUTPUT);
   digitalWrite(DMX_DIR_A, LOW);
   #ifndef ONE_PORT
     pinMode(DMX_DIR_B, OUTPUT);
     digitalWrite(DMX_DIR_B, LOW);
-  #endif
-
-  #ifndef ESP_01
-    pinMode(STATUS_LED_PIN, OUTPUT);
-    digitalWrite(STATUS_LED_PIN, LOW);
-    delay(1);
-    setStatusLed(STATUS_LED_S, PINK);
-    doStatusLedOutput();
   #endif
 
   wifi_set_sleep_type(NONE_SLEEP_T);
@@ -197,33 +209,32 @@ void setup(void) {
   SPIFFS.begin();
   debugLogSetup();
 
+  // ########## Most initialisation after debug log setup && SPIFFS ##########
+
+  LEDSetup();
+
   // Load our saved values or store defaults
   if (!resetDefaults)
     eepromLoad();
 
   // Store our counters for resetting defaults
   if (resetInfo.reason != REASON_DEFAULT_RST && resetInfo.reason != REASON_EXT_SYS_RST && resetInfo.reason != REASON_SOFT_RESTART)
-    deviceSettings.wdtCounter++;
+    deviceSettings[wdtCounter] = (uint8_t)deviceSettings[wdtCounter] + 1;
   else
-    deviceSettings.resetCounter++;
+    deviceSettings[resetCounter] = (uint8_t)deviceSettings[resetCounter] + 1;
 
   // Store values
-  eepromSave();
+  save();
 
   // Start web server before wifi since if no client connection and wifi network configured, will restart
-  //webStart();
   webSetup();
   webServer.begin();
 
-  // Start wifi
+  // Start wifi, sets Hotspot mode
   wifiStart();
   
   // Don't start our Artnet or DMX in firmware update mode or after multiple WDT resets
-  if (!deviceSettings.doFirmwareUpdate && deviceSettings.wdtCounter <= 3) {
-
-    // We only allow 1 DMX input - and RDM can't run alongside DMX in
-    if (deviceSettings.portAmode == TYPE_DMX_IN && deviceSettings.portBmode == TYPE_RDM_OUT)
-      deviceSettings.portBmode = TYPE_DMX_OUT;
+  if (!deviceSettings[doFirmwareUpdate] && deviceSettings[wdtCounter] <= 3) {
     
     // Setup Artnet Ports & Callbacks
     artStart();
@@ -235,18 +246,24 @@ void setup(void) {
     // Port Setup
     portSetup();
 
-  } else
-    deviceSettings.doFirmwareUpdate = false;
+  }
+
+  if ((uint8_t)deviceSettings[doFirmwareUpdate]) {
+    deviceSettings[doFirmwareUpdate] = 0;
+  }
+
+  // final save after hotspot mode has been resolved
+  save();
 
   delay(10);
 }
 
 void loop(void){
   // If the device lasts for 6 seconds, clear our reset timers
-  if (deviceSettings.resetCounter != 0 && millis() > 6000) {
-    deviceSettings.resetCounter = 0;
-    deviceSettings.wdtCounter = 0;
-    eepromSave();
+  if ((uint8_t)deviceSettings[resetCounter] != 0 && millis() > 6000) {
+    deviceSettings[resetCounter] = 0;
+    deviceSettings[wdtCounter] = 0;
+    save();
   }
   
   // Get the node details and handle Artnet
@@ -262,14 +279,14 @@ void loop(void){
   #endif
 
   // Do Pixel FX on port A
-  if (deviceSettings.portAmode == TYPE_WS2812 && deviceSettings.portApixMode != FX_MODE_PIXEL_MAP) {
+  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START && (uint8_t)deviceSettings[portApixMode] != FX_MODE_PIXEL_MAP) {
     if (pixFXA.Update())
       pixDone = 0;
   }
 
   // Do Pixel FX on port B
   #ifndef ONE_PORT
-    if (deviceSettings.portBmode == TYPE_WS2812 && deviceSettings.portBpixMode != FX_MODE_PIXEL_MAP) {
+    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START && (uint8_t)deviceSettings[portBpixMode] != FX_MODE_PIXEL_MAP) {
       if (pixFXB.Update())
         pixDone = 0;
     }
@@ -277,23 +294,26 @@ void loop(void){
 
   // Do pixel string output
   if (!pixDone)
-    pixDone = pixDriver.show();
+    pixDone = show_LEDs();
   
   // Handle received DMX
   if (newDmxIn) { 
-    uint8_t g, p, n;
+    uint8_t g, p, status_led;
     
     newDmxIn = false;
 
-    g = portA[0];
-    p = portA[1];
-    
-    IPAddress bc = deviceSettings.dmxInBroadcast;
-    artRDM.sendDMX(g, p, bc, dataIn, 512);
+    if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
+      g = portA[0];
+      p = portA[1];
+      status_led = STATUS_LED_A;
+    } else {
+      g = portB[0];
+      p = portB[1];
+      status_led = STATUS_LED_B;
+    }
 
-    #ifndef ESP_01
-      setStatusLed(STATUS_LED_A, CYAN);
-    #endif
+    artRDM.sendDMX(g, p, dmxBroadcast, dataIn, 512);
+    setStatusLed(status_led, CRGB::Cyan);
   }
 
   // Handle rebooting the system
@@ -311,291 +331,20 @@ void loop(void){
     ESP.restart();
   }
   
-  #ifdef STATUS_LED_PIN
+  #ifdef STATUS_LED_MODE
     // Output status to LEDs once per second
     if (statusTimer < millis()) {
 
       // Flash our main status LED
       if ((statusTimer % 2000) > 1000)
-        setStatusLed(STATUS_LED_S, BLACK);
+        setStatusLed(STATUS_LED_S, CRGB::Black);
       else if (nodeError[0] != '\0')
-        setStatusLed(STATUS_LED_S, RED);
+        setStatusLed(STATUS_LED_S, CRGB::Red);
       else
-        setStatusLed(STATUS_LED_S, GREEN);
+        setStatusLed(STATUS_LED_S, CRGB::Green);
 
       doStatusLedOutput();
       statusTimer = millis() + 1000;
     }
   #endif
-}
-
-void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled) {
-  if (portA[0] == group) {
-    if (deviceSettings.portAmode == TYPE_WS2812) {
-      
-      #ifndef ESP_01
-        setStatusLed(STATUS_LED_A, GREEN);
-      #endif
-      
-      if (deviceSettings.portApixMode == FX_MODE_PIXEL_MAP) {
-        if (numChans > 510)
-          numChans = 510;
-        
-        // Copy DMX data to the pixels buffer
-        pixDriver.setBuffer(0, port * 510, artRDM.getDMX(group, port), numChans);
-        
-        // Output to pixel strip
-        if (!syncEnabled)
-          pixDone = false;
-
-        return;
-
-      // FX 12 Mode
-      } else if (port == portA[1]) {
-        byte* a = artRDM.getDMX(group, port);
-        uint16_t s = deviceSettings.portApixFXstart - 1;
-        
-        pixFXA.Intensity = a[s + 0];
-        pixFXA.setFX(a[s + 1]);
-        pixFXA.setSpeed(a[s + 2]);
-        pixFXA.Pos = a[s + 3];
-        pixFXA.Size = a[s + 4];
-        
-        pixFXA.setColour1((a[s + 5] << 16) | (a[s + 6] << 8) | a[s + 7]);
-        pixFXA.setColour2((a[s + 8] << 16) | (a[s + 9] << 8) | a[s + 10]);
-        pixFXA.Size1 = a[s + 11];
-        //pixFXA.Fade = a[s + 12];
-
-        pixFXA.NewData = 1;
-          
-      }
-
-    // DMX modes
-    } else if (deviceSettings.portAmode != TYPE_DMX_IN && port == portA[1]) {
-      dmxA.chanUpdate(numChans);
-      
-      #ifndef ESP_01
-        setStatusLed(STATUS_LED_A, BLUE);
-      #endif
-    }
-      
-
-  #ifndef ONE_PORT
-  } else if (portB[0] == group) {
-    if (deviceSettings.portBmode == TYPE_WS2812) {
-      setStatusLed(STATUS_LED_B, GREEN);
-      
-      if (deviceSettings.portBpixMode == FX_MODE_PIXEL_MAP) {
-        if (numChans > 510)
-          numChans = 510;
-        
-        // Copy DMX data to the pixels buffer
-        pixDriver.setBuffer(1, port * 510, artRDM.getDMX(group, port), numChans);
-        
-        // Output to pixel strip
-        if (!syncEnabled)
-          pixDone = false;
-
-        return;
-
-      // FX 12 mode
-      } else if (port == portB[1]) {
-        byte* a = artRDM.getDMX(group, port);
-        uint16_t s = deviceSettings.portBpixFXstart - 1;
-        
-        pixFXB.Intensity = a[s + 0];
-        pixFXB.setFX(a[s + 1]);
-        pixFXB.setSpeed(a[s + 2]);
-        pixFXB.Pos = a[s + 3];
-        pixFXB.Size = a[s + 4];
-        pixFXB.setColour1((a[s + 5] << 16) | (a[s + 6] << 8) | a[s + 7]);
-        pixFXB.setColour2((a[s + 8] << 16) | (a[s + 9] << 8) | a[s + 10]);
-        pixFXB.Size1 = a[s + 11];
-        //pixFXB.Fade = a[s + 12];
-
-        pixFXB.NewData = 1;
-      }
-    } else if (deviceSettings.portBmode != TYPE_DMX_IN && port == portB[1]) {
-      dmxB.chanUpdate(numChans);
-      setStatusLed(STATUS_LED_B, BLUE);
-    }
-  #endif
-  }
-
-}
-
-void syncHandle() {
-  if (deviceSettings.portAmode == TYPE_WS2812) {
-    rdmPause(1);
-    pixDone = pixDriver.show();
-    rdmPause(0);
-  } else if (deviceSettings.portAmode != TYPE_DMX_IN)
-    dmxA.unPause();
-
-  #ifndef ONE_PORT
-    if (deviceSettings.portBmode == TYPE_WS2812) {
-      rdmPause(1);
-      pixDone = pixDriver.show();
-      rdmPause(0);
-    } else if (deviceSettings.portBmode != TYPE_DMX_IN)
-      dmxB.unPause();
-  #endif
-}
-
-void ipHandle() {
-  if (artRDM.getDHCP()) {
-    deviceSettings.gateway = INADDR_NONE;
-    
-    deviceSettings.dhcpEnable = 1;
-    doReboot = true;
-    /*
-    // Re-enable DHCP
-    WiFi.begin(deviceSettings.wifiSSID, deviceSettings.wifiPass);
-
-    // Wait for an IP
-    while (WiFi.status() != WL_CONNECTED)
-      yield();
-    
-    // Save settings to struct
-    deviceSettings.ip = WiFi.localIP();
-    deviceSettings.subnet = WiFi.subnetMask();
-    deviceSettings.broadcast = {~deviceSettings.subnet[0] | (deviceSettings.ip[0] & deviceSettings.subnet[0]), ~deviceSettings.subnet[1] | (deviceSettings.ip[1] & deviceSettings.subnet[1]), ~deviceSettings.subnet[2] | (deviceSettings.ip[2] & deviceSettings.subnet[2]), ~deviceSettings.subnet[3] | (deviceSettings.ip[3] & deviceSettings.subnet[3])};
-
-    // Pass IP to artRDM
-    artRDM.setIP(deviceSettings.ip, deviceSettings.subnet);
-    */
-  
-  } else {
-    deviceSettings.ip = artRDM.getIP();
-    deviceSettings.subnet = artRDM.getSubnetMask();
-    deviceSettings.gateway = deviceSettings.ip;
-    deviceSettings.gateway[3] = 1;
-    deviceSettings.broadcast = {~deviceSettings.subnet[0] | (deviceSettings.ip[0] & deviceSettings.subnet[0]), ~deviceSettings.subnet[1] | (deviceSettings.ip[1] & deviceSettings.subnet[1]), ~deviceSettings.subnet[2] | (deviceSettings.ip[2] & deviceSettings.subnet[2]), ~deviceSettings.subnet[3] | (deviceSettings.ip[3] & deviceSettings.subnet[3])};
-    deviceSettings.dhcpEnable = 0;
-    
-    doReboot = true;
-    
-    //WiFi.config(deviceSettings.ip,deviceSettings.ip,deviceSettings.ip,deviceSettings.subnet);
-  }
-
-  // Store everything to EEPROM
-  eepromSave();
-}
-
-void addressHandle() {
-  memcpy(&deviceSettings.nodeName, artRDM.getShortName(), ARTNET_SHORT_NAME_LENGTH);
-  memcpy(&deviceSettings.longName, artRDM.getLongName(), ARTNET_LONG_NAME_LENGTH);
-  
-  deviceSettings.portAnet = artRDM.getNet(portA[0]);
-  deviceSettings.portAsub = artRDM.getSubNet(portA[0]);
-  deviceSettings.portAuni[0] = artRDM.getUni(portA[0], portA[1]);
-  deviceSettings.portAmerge = artRDM.getMerge(portA[0], portA[1]);
-
-  if (artRDM.getE131(portA[0], portA[1]))
-    deviceSettings.portAprot = PROT_ARTNET_SACN;
-  else
-    deviceSettings.portAprot = PROT_ARTNET;
-
-
-  #ifndef ONE_PORT
-    deviceSettings.portBnet = artRDM.getNet(portB[0]);
-    deviceSettings.portBsub = artRDM.getSubNet(portB[0]);
-    deviceSettings.portBuni[0] = artRDM.getUni(portB[0], portB[1]);
-    deviceSettings.portBmerge = artRDM.getMerge(portB[0], portB[1]);
-    
-    if (artRDM.getE131(portB[0], portB[1]))
-      deviceSettings.portBprot = PROT_ARTNET_SACN;
-    else
-      deviceSettings.portBprot = PROT_ARTNET;
-  #endif
-  
-  // Store everything to EEPROM
-  eepromSave();
-}
-
-void rdmHandle(uint8_t group, uint8_t port, rdm_data* c) {
-  if (portA[0] == group && portA[1] == port)
-    dmxA.rdmSendCommand(c);
-
-  #ifndef ONE_PORT
-    else if (portB[0] == group && portB[1] == port)
-      dmxB.rdmSendCommand(c);
-  #endif
-}
-
-void rdmReceivedA(rdm_data* c) {
-  artRDM.rdmResponse(c, portA[0], portA[1]);
-}
-
-void sendTodA() {
-  artRDM.artTODData(portA[0], portA[1], dmxA.todMan(), dmxA.todDev(), dmxA.todCount(), dmxA.todStatus());
-}
-
-#ifndef ONE_PORT
-void rdmReceivedB(rdm_data* c) {
-  artRDM.rdmResponse(c, portB[0], portB[1]);
-}
-
-void sendTodB() {
-  artRDM.artTODData(portB[0], portB[1], dmxB.todMan(), dmxB.todDev(), dmxB.todCount(), dmxB.todStatus());
-}
-#endif
-
-void todRequest(uint8_t group, uint8_t port) {
-  if (portA[0] == group && portA[1] == port)
-    sendTodA();
-
-  #ifndef ONE_PORT
-    else if (portB[0] == group && portB[1] == port)
-      sendTodB();
-  #endif
-}
-
-void todFlush(uint8_t group, uint8_t port) {
-  if (portA[0] == group && portA[1] == port)
-    dmxA.rdmDiscovery();
-
-  #ifndef ONE_PORT
-    else if (portB[0] == group && portB[1] == port)
-      dmxB.rdmDiscovery();
-  #endif
-}
-
-void dmxIn(uint16_t num) {
-  // Double buffer switch
-  byte* tmp = dataIn;
-  dataIn = dmxA.getChans();
-  dmxA.setBuffer(tmp);
-  
-  newDmxIn = true;
-}
-
-void doStatusLedOutput() {
-  uint8_t a[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-  
-  if (!statusLedsOff) {
-    if (statusLedsDim) {
-      for (uint8_t x = 0; x < 9; x++)
-        a[x] = statusLedData[x] & STATUS_DIM;
-    } else {
-      for (uint8_t x = 0; x < 9; x++)
-        a[x] = statusLedData[x];
-    }
-  }
-
-  #ifdef STATUS_LED_MODE_APA106
-    pixDriver.doAPA106(&a[0], STATUS_LED_PIN, 9);
-  #endif
-
-  #ifdef STATUS_LED_MODE_WS2812
-    pixDriver.doPixel(&a[0], STATUS_LED_PIN, 9);
-  #endif
-
-  // Tint LEDs red slightly - they'll be changed back before being displayed if no errors
-  for (uint8_t x = 1; x < 9; x += 3)
-    statusLedData[x] = 125;
-}
-
-void setStatusLed(uint8_t num, uint32_t col) {
-  memcpy(&statusLedData[num*3], &col, 3);
 }

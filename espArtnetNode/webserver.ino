@@ -3,18 +3,19 @@
  * 
  * Port to AsyncWebServer
  */
+
 #include "debugLog.h"
 
 // directory, size, date. name is done after
 const char ll_fmt[] PROGMEM = "%s %u %s ";
 
 // Debug: log directory listing
-void log_ls(char const* path) {
-  char buf[1024];
-  String list = ls(path);
-  list.toCharArray(buf, 1024);
-  debugLog(LOG_DEBUG, "Webserver", buf);
-}
+//void log_ls(char const* path) {
+//  char buf[1024];
+//  String list = ls(path);
+//  list.toCharArray(buf, 1024);
+//  debugLog(LOG_DEBUG, "Webserver", buf);
+//}
 
 String ls(char const* path) {
   char buf[256];
@@ -38,12 +39,10 @@ String ls(char const* path) {
 
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found!");
-  // Debug
-  log_ls("/");
 }
 
 void webRespond(AsyncWebServerRequest *request, String json) {
-  AsyncWebServerResponse *r = request->beginResponse(200, "application/json", json);
+  AsyncWebServerResponse *r = request->beginResponse(200, JSON_MIMETYPE, json);
   r->addHeader("Connection", "close");
   r->addHeader("Access-Control-Allow-Origin", "*");
   request->send(r);

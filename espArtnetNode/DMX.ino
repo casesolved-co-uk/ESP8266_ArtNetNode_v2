@@ -1,5 +1,6 @@
 /*
 ESP8266_ArtNetNode v2.1.0
+Copyright (c) 2016, Matthew Tong
 Copyright (c) 2023, Richard Case
 https://github.com/casesolved-co-uk/ESP8266_ArtNetNode_v2
 
@@ -12,28 +13,24 @@ warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Ge
 You should have received a copy of the GNU General Public License along with this program.
 If not, see http://www.gnu.org/licenses/
 
-For storing a debug log in the SPIFFS
+DMX handlers
 */
 
-#ifndef debugLog_h
-#define debugLog_h
+// DMX callback
+void dmxIn(uint16_t numChans) {
+  (void) numChans;
+  espDMX* dmx;
 
-// debug helper
-const char got_here_u8[] PROGMEM = "Got here %d";
-const char got_here_u32[] PROGMEM = "Got here %08" PRIx32;
+  if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_IN) {
+    dmx = &dmxB;
+  } else {
+    dmx = &dmxA;
+  }
 
-typedef enum {
-  LOG_DEBUG = 0,
-  LOG_INFO,
-  LOG_WARN,
-  LOG_ERROR
-} loglevel_t;
-
-const char* loglevelstr[] = {
-  "DEBUG", 
-  "INFO",
-  "WARN",
-  "ERROR"
-};
-
-#endif
+  // could be overwritten with 0
+  byte* tmp = dataIn;
+  dataIn = dmx->getChans();
+  dmx->setBuffer(tmp);
+  
+  newDmxIn = true;
+}

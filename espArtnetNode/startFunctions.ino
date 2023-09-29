@@ -13,6 +13,8 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see http://www.gnu.org/licenses/
 */
 
+const char wifi_connect[] PROGMEM = "Wifi connected.<br />SSID: %s";
+const char wifi_hotspot[] PROGMEM = "No Wifi. Hotspot started.<br />\nHotspot SSID: %s";
 
 void doNodeReport() {
   if (nextNodeReport > millis())
@@ -35,7 +37,7 @@ void doNodeReport() {
     
     strcpy(c, "OK: PortA:");
 
-    switch (deviceSettings.portAmode) {
+    switch ((uint8_t)deviceSettings[portAmode]) {
       case TYPE_DMX_OUT:
         sprintf(c, "%s DMX Out", c);
         break;
@@ -48,17 +50,19 @@ void doNodeReport() {
         sprintf(c, "%s DMX In", c);
         break;
       
-      case TYPE_WS2812:
-        if (deviceSettings.portApixMode == FX_MODE_12)
-            sprintf(c, "%s 12chan", c);
-          sprintf(c, "%s WS2812 %ipixels", c, deviceSettings.portAnumPix);
+      default:
+        if ((uint8_t)deviceSettings[portApixMode] == FX_MODE_12) {
+          sprintf(c, "%s 12chan", c);
+        } else {
+          sprintf(c, "%s RGBLED %ipixels", c, (uint16_t)deviceSettings[portAnumPix]);
+        }
         break;
     }
   
     #ifndef ONE_PORT
       sprintf(c, "%s. PortB:", c);
       
-      switch (deviceSettings.portBmode) {
+      switch ((uint8_t)deviceSettings[portBmode]) {
         case TYPE_DMX_OUT:
           sprintf(c, "%s DMX Out", c);
           break;
@@ -66,11 +70,17 @@ void doNodeReport() {
         case TYPE_RDM_OUT:
           sprintf(c, "%s RDM Out", c);
           break;
-        
-        case TYPE_WS2812:
-          if (deviceSettings.portBpixMode == FX_MODE_12)
+
+        case TYPE_DMX_IN:
+          sprintf(c, "%s DMX In", c);
+          break;
+
+        default:
+          if ((uint8_t)deviceSettings[portBpixMode] == FX_MODE_12) {
             sprintf(c, "%s 12chan", c);
-          sprintf(c, "%s WS2812 %ipixels", c, deviceSettings.portBnumPix);
+          } else {
+            sprintf(c, "%s RGBLED %ipixels", c, (uint16_t)deviceSettings[portBnumPix]);
+          }
           break;
       }
     #endif
@@ -80,21 +90,18 @@ void doNodeReport() {
 }
 
 void portSetup() {
-  if (deviceSettings.portAmode == TYPE_DMX_OUT || deviceSettings.portAmode == TYPE_RDM_OUT) {
-    #ifndef ESP_01
-      setStatusLed(STATUS_LED_A, BLUE);
-    #endif
-    
+  if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_OUT || (uint8_t)deviceSettings[portAmode] == TYPE_RDM_OUT) {
+    setStatusLed(STATUS_LED_A, CRGB::Blue);
+
     dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]));
-    if (deviceSettings.portAmode == TYPE_RDM_OUT && !dmxA.rdmEnabled()) {
+    if ((uint8_t)deviceSettings[portAmode] == TYPE_RDM_OUT && !dmxA.rdmEnabled()) {
       dmxA.rdmEnable(ESTA_MAN, ESTA_DEV);
       dmxA.rdmSetCallBack(rdmReceivedA);
       dmxA.todSetCallBack(sendTodA);
     }
-
-  } else if (deviceSettings.portAmode == TYPE_DMX_IN) {
+  } else if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
     #ifndef ESP_01
-      setStatusLed(STATUS_LED_A, CYAN);
+      setStatusLed(STATUS_LED_A, CRGB::Cyan);
     #endif
     
     dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]));
@@ -104,129 +111,139 @@ void portSetup() {
     dataIn = (byte*) os_malloc(sizeof(byte) * 512);
     memset(dataIn, 0, 512);
 
-  } else if (deviceSettings.portAmode == TYPE_WS2812) {
+  } else {
     #ifndef ESP_01
-      setStatusLed(STATUS_LED_A, GREEN);
+      setStatusLed(STATUS_LED_A, CRGB::Green);
     #endif
-    
-    digitalWrite(DMX_DIR_A, HIGH);
-    pixDriver.setStrip(0, DMX_TX_A, deviceSettings.portAnumPix, deviceSettings.portApixConfig);
+
+    led_controller_A();
   }
   
   #ifndef ONE_PORT
-    if (deviceSettings.portBmode == TYPE_DMX_OUT || deviceSettings.portBmode == TYPE_RDM_OUT) {
-      setStatusLed(STATUS_LED_B, BLUE);
+    if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_OUT || (uint8_t)deviceSettings[portBmode] == TYPE_RDM_OUT) {
+      setStatusLed(STATUS_LED_B, CRGB::Blue);
       
       dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]));
-      if (deviceSettings.portBmode == TYPE_RDM_OUT && !dmxB.rdmEnabled()) {
+      if ((uint8_t)deviceSettings[portBmode] == TYPE_RDM_OUT && !dmxB.rdmEnabled()) {
         dmxB.rdmEnable(ESTA_MAN, ESTA_DEV);
         dmxB.rdmSetCallBack(rdmReceivedB);
         dmxB.todSetCallBack(sendTodB);
       }
-      
-    } else if (deviceSettings.portBmode == TYPE_WS2812) {
-      setStatusLed(STATUS_LED_B, GREEN);
-      
-      digitalWrite(DMX_DIR_B, HIGH);
-      pixDriver.setStrip(1, DMX_TX_B, deviceSettings.portBnumPix, deviceSettings.portBpixConfig);
+    } else if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_IN) {
+      #ifndef ESP_01
+        setStatusLed(STATUS_LED_B, CRGB::Cyan);
+      #endif
+
+      dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]));
+      dmxB.dmxIn(true);
+      dmxB.setInputCallback(dmxIn);
+
+      dataIn = (byte*) os_malloc(sizeof(byte) * 512);
+      memset(dataIn, 0, 512);
+
+    } else {
+      #ifndef ESP_01
+        setStatusLed(STATUS_LED_B, CRGB::Green);
+      #endif
+
+      led_controller_B();
     }
   #endif
 
-  pixDriver.allowInterruptSingle = WS2812_ALLOW_INT_SINGLE;
-  pixDriver.allowInterruptDouble = WS2812_ALLOW_INT_DOUBLE;
+  //pixDriver.allowInterruptSingle = WS2812_ALLOW_INT_SINGLE;
+  //pixDriver.allowInterruptDouble = WS2812_ALLOW_INT_DOUBLE;
 }
 
 void artStart() {
   // Initialise out ArtNet
-  if (isHotspot)
-    artRDM.init(deviceSettings.hotspotIp, deviceSettings.hotspotSubnet, true, deviceSettings.nodeName, deviceSettings.longName, ARTNET_OEM, ESTA_MAN, MAC_array);
-  else
-    artRDM.init(deviceSettings.ip, deviceSettings.subnet, deviceSettings.dhcpEnable, deviceSettings.nodeName, deviceSettings.longName, ARTNET_OEM, ESTA_MAN, MAC_array);
+  artRDM.init(ip, subnet, isHotspot ? true : (uint8_t)deviceSettings[dhcpEnable], (const char*)deviceSettings[nodeName], (const char*)deviceSettings[longName], ARTNET_OEM, ESTA_MAN, MAC_array);
 
   // Set firmware
   artRDM.setFirmwareVersion(ART_FIRM_VERSION);
 
+  /************* PORT A *************/
   // Add Group
-  portA[0] = artRDM.addGroup(deviceSettings.portAnet, deviceSettings.portAsub);
+  portA[0] = artRDM.addGroup((uint8_t)deviceSettings[portAnet], (uint8_t)deviceSettings[portAsub]);
   
-  bool e131 = (deviceSettings.portAprot == PROT_ARTNET_SACN) ? true : false;
+  bool e131 = ((uint8_t)deviceSettings[portAprot] == PROT_ARTNET_SACN) ? true : false;
 
-  // WS2812 uses TYPE_DMX_OUT - the rest use the value assigned
-  if (deviceSettings.portAmode == TYPE_WS2812)
-    portA[1] = artRDM.addPort(portA[0], 0, deviceSettings.portAuni[0], TYPE_DMX_OUT, deviceSettings.portAmerge);
+  // LED modes advertise mode TYPE_DMX_OUT - the rest use the value assigned
+  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START)
+    portA[1] = artRDM.addPort(portA[0], 0, deviceSettings[portAuni][0], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
   else
-    portA[1] = artRDM.addPort(portA[0], 0, deviceSettings.portAuni[0], deviceSettings.portAmode, deviceSettings.portAmerge);
+    portA[1] = artRDM.addPort(portA[0], 0, deviceSettings[portAuni][0], (uint8_t)deviceSettings[portAmode], (uint8_t)deviceSettings[portAmerge]);
 
   artRDM.setE131(portA[0], portA[1], e131);
-  artRDM.setE131Uni(portA[0], portA[1], deviceSettings.portAsACNuni[0]);
+  artRDM.setE131Uni(portA[0], portA[1], deviceSettings[portAsACNuni][0]);
   
-  // Add extra Artnet ports for WS2812
-  if (deviceSettings.portAmode == TYPE_WS2812 && deviceSettings.portApixMode == FX_MODE_PIXEL_MAP) {
-    if (deviceSettings.portAnumPix > 170) {
-      portA[2] = artRDM.addPort(portA[0], 1, deviceSettings.portAuni[1], TYPE_DMX_OUT, deviceSettings.portAmerge);
-      
+  // Add extra Artnet ports for long LED strips
+  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START && (uint8_t)deviceSettings[portApixMode] == FX_MODE_PIXEL_MAP) {
+    if ((uint16_t)deviceSettings[portAnumPix] > 170) {
+      portA[2] = artRDM.addPort(portA[0], 1, deviceSettings[portAuni][1], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+
       artRDM.setE131(portA[0], portA[2], e131);
-      artRDM.setE131Uni(portA[0], portA[2], deviceSettings.portAsACNuni[1]);
+      artRDM.setE131Uni(portA[0], portA[2], deviceSettings[portAsACNuni][1]);
     }
-    if (deviceSettings.portAnumPix > 340) {
-      portA[3] = artRDM.addPort(portA[0], 2, deviceSettings.portAuni[2], TYPE_DMX_OUT, deviceSettings.portAmerge);
-      
+    if ((uint16_t)deviceSettings[portAnumPix] > 340) {
+      portA[3] = artRDM.addPort(portA[0], 2, deviceSettings[portAuni][2], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+
       artRDM.setE131(portA[0], portA[3], e131);
-      artRDM.setE131Uni(portA[0], portA[3], deviceSettings.portAsACNuni[2]);
+      artRDM.setE131Uni(portA[0], portA[3], deviceSettings[portAsACNuni][2]);
     }
-    if (deviceSettings.portAnumPix > 510) {
-      portA[4] = artRDM.addPort(portA[0], 3, deviceSettings.portAuni[3], TYPE_DMX_OUT, deviceSettings.portAmerge);
-      
+    if (deviceSettings[portAnumPix] > 510) {
+      portA[4] = artRDM.addPort(portA[0], 3, deviceSettings[portAuni][3], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+
       artRDM.setE131(portA[0], portA[4], e131);
-      artRDM.setE131Uni(portA[0], portA[4], deviceSettings.portAsACNuni[3]);
+      artRDM.setE131Uni(portA[0], portA[4], deviceSettings[portAsACNuni][3]);
     }
   }
 
 
+  /************* PORT B *************/
   #ifndef ONE_PORT
     // Add Group
-    portB[0] = artRDM.addGroup(deviceSettings.portBnet, deviceSettings.portBsub);
-    e131 = (deviceSettings.portBprot == PROT_ARTNET_SACN) ? true : false;
+    portB[0] = artRDM.addGroup(deviceSettings[portBnet], deviceSettings[portBsub]);
+    e131 = ((uint8_t)deviceSettings[portBprot] == PROT_ARTNET_SACN) ? true : false;
     
-    // WS2812 uses TYPE_DMX_OUT - the rest use the value assigned
-    if (deviceSettings.portBmode == TYPE_WS2812)
-      portB[1] = artRDM.addPort(portB[0], 0, deviceSettings.portBuni[0], TYPE_DMX_OUT, deviceSettings.portBmerge);
+    // LED modes advertise mode TYPE_DMX_OUT - the rest use the value assigned
+    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START)
+      portB[1] = artRDM.addPort(portB[0], 0, deviceSettings[portBuni][0], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
     else
-      portB[1] = artRDM.addPort(portB[0], 0, deviceSettings.portBuni[0], deviceSettings.portBmode, deviceSettings.portBmerge);
+      portB[1] = artRDM.addPort(portB[0], 0, deviceSettings[portBuni][0], (uint8_t)deviceSettings[portBmode], (uint8_t)deviceSettings[portBmerge]);
 
     artRDM.setE131(portB[0], portB[1], e131);
-    artRDM.setE131Uni(portB[0], portB[1], deviceSettings.portBsACNuni[0]);
+    artRDM.setE131Uni(portB[0], portB[1], deviceSettings[portBsACNuni][0]);
   
-    // Add extra Artnet ports for WS2812
-    if (deviceSettings.portBmode == TYPE_WS2812 && deviceSettings.portBpixMode == FX_MODE_PIXEL_MAP) {
-      if (deviceSettings.portBnumPix > 170) {
-        portB[2] = artRDM.addPort(portB[0], 1, deviceSettings.portBuni[1], TYPE_DMX_OUT, deviceSettings.portBmerge);
+    // Add extra Artnet ports for long LED strips
+    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START && (uint8_t)deviceSettings[portBpixMode] == FX_MODE_PIXEL_MAP) {
+      if (deviceSettings[portBnumPix] > 170) {
+        portB[2] = artRDM.addPort(portB[0], 1, deviceSettings[portBuni][1], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
         
         artRDM.setE131(portB[0], portB[2], e131);
-        artRDM.setE131Uni(portB[0], portB[2], deviceSettings.portBsACNuni[1]);
+        artRDM.setE131Uni(portB[0], portB[2], deviceSettings[portBsACNuni][1]);
       }
-      if (deviceSettings.portBnumPix > 340) {
-        portB[3] = artRDM.addPort(portB[0], 2, deviceSettings.portBuni[2], TYPE_DMX_OUT, deviceSettings.portBmerge);
+      if (deviceSettings[portBnumPix] > 340) {
+        portB[3] = artRDM.addPort(portB[0], 2, deviceSettings[portBuni][2], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
         
         artRDM.setE131(portB[0], portB[3], e131);
-        artRDM.setE131Uni(portB[0], portB[3], deviceSettings.portBsACNuni[2]);
+        artRDM.setE131Uni(portB[0], portB[3], deviceSettings[portBsACNuni][2]);
       }
-      if (deviceSettings.portBnumPix > 510) {
-        portB[4] = artRDM.addPort(portB[0], 3, deviceSettings.portBuni[3], TYPE_DMX_OUT, deviceSettings.portBmerge);
+      if (deviceSettings[portBnumPix] > 510) {
+        portB[4] = artRDM.addPort(portB[0], 3, deviceSettings[portBuni][3], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
         
         artRDM.setE131(portB[0], portB[4], e131);
-        artRDM.setE131Uni(portB[0], portB[4], deviceSettings.portBsACNuni[3]);
+        artRDM.setE131Uni(portB[0], portB[4], deviceSettings[portBsACNuni][3]);
       }
     }
   #endif
 
-  // Add required callback functions
-  artRDM.setArtDMXCallback(dmxHandle);
-  artRDM.setArtRDMCallback(rdmHandle);
-  artRDM.setArtSyncCallback(syncHandle);
-  artRDM.setArtIPCallback(ipHandle);
-  artRDM.setArtAddressCallback(addressHandle);
-  artRDM.setTODRequestCallback(todRequest);
+  // Add required RDM callback functions
+  artRDM.setArtDMXCallback(dmxHandle);          // Consume DMX for local lights
+  artRDM.setArtRDMCallback(rdmHandle);          // RDM to DMX routing
+  artRDM.setArtSyncCallback(syncHandle);        // Local light sync
+  artRDM.setArtIPCallback(ipHandle);            // DHCP
+  artRDM.setArtAddressCallback(addressHandle);  // IP Settings
+  artRDM.setTODRequestCallback(todRequest);     // Table of devices
   artRDM.setTODFlushCallback(todFlush);
 
 
@@ -269,45 +286,43 @@ void artStart() {
 
 void wifiStart() {
   // If it's the default WiFi SSID, make it unique
-  if (strcmp(deviceSettings.hotspotSSID, "espArtNetNode") == 0 || deviceSettings.hotspotSSID[0] == '\0')
-    sprintf(deviceSettings.hotspotSSID, "espArtNetNode_%05u", (ESP.getChipId() & 0xFF));
+  if (strcmp(deviceSettings[hotspotSSID].as<const char*>(), "espArtNetNode") == 0 || deviceSettings[hotspotSSID].as<const char*>()[0] == '\0') {
+    char buf[20];
+    sprintf(buf, "espArtNetNode_%05u", (ESP.getChipId() & 0xFF));
+    deviceSettings[hotspotSSID] = buf;
+  }
   
-  if (deviceSettings.standAloneEnable) {
+  if ((bool)deviceSettings[standAloneEnable]) {
     startHotspot();
-
-    deviceSettings.ip = deviceSettings.hotspotIp;
-    deviceSettings.subnet = deviceSettings.hotspotSubnet;
-    deviceSettings.broadcast = {~deviceSettings.subnet[0] | (deviceSettings.ip[0] & deviceSettings.subnet[0]), ~deviceSettings.subnet[1] | (deviceSettings.ip[1] & deviceSettings.subnet[1]), ~deviceSettings.subnet[2] | (deviceSettings.ip[2] & deviceSettings.subnet[2]), ~deviceSettings.subnet[3] | (deviceSettings.ip[3] & deviceSettings.subnet[3])};
-  
     return;
   }
   
-  if (deviceSettings.wifiSSID[0] != '\0') {
-    WiFi.begin(deviceSettings.wifiSSID, deviceSettings.wifiPass);
+  if (deviceSettings[wifiSSID][0] != '\0') {
+    WiFi.begin(deviceSettings[wifiSSID].as<const char*>(), deviceSettings[wifiPass].as<const char*>());
     WiFi.mode(WIFI_STA);
-    WiFi.hostname(deviceSettings.nodeName);
+    WiFi.hostname(deviceSettings[nodeName].as<const char*>());
     
-    unsigned long endTime = millis() + (deviceSettings.hotspotDelay * 1000);
+    unsigned long endTime = millis() + ((uint8_t)deviceSettings[hotspotDelay] * 1000);
 
-    if (deviceSettings.dhcpEnable) {
+    if ((bool)deviceSettings[dhcpEnable]) {
       while (WiFi.status() != WL_CONNECTED && endTime > millis())
         yield();
 
       if (millis() >= endTime)
         startHotspot();
       
-      deviceSettings.ip = WiFi.localIP();
-      deviceSettings.subnet = WiFi.subnetMask();
+      ip = WiFi.localIP();
+      subnet = WiFi.subnetMask();
 
-      if (deviceSettings.gateway == INADDR_NONE)
-        deviceSettings.gateway = WiFi.gatewayIP();
-      
-      deviceSettings.broadcast = {~deviceSettings.subnet[0] | (deviceSettings.ip[0] & deviceSettings.subnet[0]), ~deviceSettings.subnet[1] | (deviceSettings.ip[1] & deviceSettings.subnet[1]), ~deviceSettings.subnet[2] | (deviceSettings.ip[2] & deviceSettings.subnet[2]), ~deviceSettings.subnet[3] | (deviceSettings.ip[3] & deviceSettings.subnet[3])};
+      if (gateway == INADDR_NONE)
+        gateway = WiFi.gatewayIP();
+
+      conversions();
     } else
-      WiFi.config(deviceSettings.ip, deviceSettings.gateway, deviceSettings.subnet);
+      WiFi.config(ip, gateway, subnet);
 
     //sprintf(wifiStatus, "Wifi connected.  Signal: %ld<br />SSID: %s", WiFi.RSSI(), deviceSettings.wifiSSID);
-    sprintf(wifiStatus, "Wifi connected.<br />SSID: %s", deviceSettings.wifiSSID);
+    sprintf_P(wifiStatus, wifi_connect, deviceSettings[wifiSSID].as<const char*>());
     WiFi.macAddress(MAC_array);
     
   } else
@@ -318,17 +333,18 @@ void wifiStart() {
 
 void startHotspot() {
   yield();
-  
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(deviceSettings.hotspotSSID, deviceSettings.hotspotPass);
-  WiFi.softAPConfig(deviceSettings.hotspotIp, deviceSettings.hotspotIp, deviceSettings.hotspotSubnet);
-
-  sprintf(wifiStatus, "No Wifi. Hotspot started.<br />\nHotspot SSID: %s", deviceSettings.hotspotSSID);
-  WiFi.macAddress(MAC_array);
 
   isHotspot = true;
+  conversions();
+
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(deviceSettings[hotspotSSID].as<const char*>(), deviceSettings[hotspotPass].as<const char*>());
+  WiFi.softAPConfig(ip, ip, subnet);
+
+  sprintf_P(wifiStatus, wifi_hotspot, deviceSettings[hotspotSSID].as<const char*>());
+  WiFi.macAddress(MAC_array);
   
-  if (deviceSettings.standAloneEnable)
+  if ((bool)deviceSettings[standAloneEnable])
     return;
 
   unsigned long endTime = millis() + 30000;
@@ -340,4 +356,5 @@ void startHotspot() {
 
   ESP.restart();
   isHotspot = false;
+  conversions();
 }
