@@ -16,9 +16,6 @@ If not, see http://www.gnu.org/licenses/
 
 #include "espDMX_RDM.h"
 
-espDMX dmxA(0);
-espDMX dmxB(1);
-
 void dmx_interrupt_handler(void);
 
 uint16_t dmx_get_tx_fifo_room(dmx_t* dmx);

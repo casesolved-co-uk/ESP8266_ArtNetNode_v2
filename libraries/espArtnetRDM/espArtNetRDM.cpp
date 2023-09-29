@@ -65,7 +65,7 @@ void esp8266ArtNetRDM::end() {
   _art = 0;
 }
 
-void esp8266ArtNetRDM::init(IPAddress ip, IPAddress subnet, bool dhcp, char* shortname, char* longname, uint16_t oem, uint16_t esta, uint8_t* mac) {
+void esp8266ArtNetRDM::init(IPAddress ip, IPAddress subnet, bool dhcp, const char* shortname, const char* longname, uint16_t oem, uint16_t esta, uint8_t* mac) {
   if (_art != 0)
     os_free(_art);
 
@@ -80,7 +80,7 @@ void esp8266ArtNetRDM::init(IPAddress ip, IPAddress subnet, bool dhcp, char* sho
   _art->nodeReportCounter = 0;
   _art->nodeReportCode = ARTNET_RC_POWER_OK;
   _art->deviceIP = ip;
-  _art->subnet = ip;
+  _art->subnet = subnet;
   _art->broadcastIP = IPAddress((uint32_t)ip | ~((uint32_t)subnet));
   _art->dhcp = dhcp;
   _art->oemLo = (byte)oem;
@@ -216,7 +216,6 @@ bool esp8266ArtNetRDM::closePort(uint8_t g, uint8_t p) {
   // Mark port as empty
   group->ports[p] = 0;
   group->numPorts--;
-  group->ports[p] == 0;
   return true;
 }
 
@@ -1062,9 +1061,6 @@ void esp8266ArtNetRDM::artTODData(uint8_t g, uint8_t p, uint16_t* uidMan, uint32
   artTodData[25] = uidTotal;
 
   uint8_t blockCount = 0;
-  uint16_t uidPos = 0;
-  
-  uint16_t f = uidTotal;
 
   while (1) {
     artTodData[26] = blockCount;
@@ -1101,6 +1097,7 @@ void esp8266ArtNetRDM::_artTODControl(unsigned char *_artBuffer) {
 }
 
 void esp8266ArtNetRDM::_artRDM(unsigned char *_artBuffer, uint16_t packetSize) {
+  (void) packetSize;
   if (_art->rdmCallBack == 0)
     return;
 
@@ -1297,7 +1294,7 @@ bool esp8266ArtNetRDM::getMerge(uint8_t g, uint8_t p) {
 
 
 
-void esp8266ArtNetRDM::setShortName(char* name) {
+void esp8266ArtNetRDM::setShortName(const char* name) {
   if (_art == 0)
     return;
   memcpy(_art->shortName, name, ARTNET_SHORT_NAME_LENGTH);
@@ -1310,7 +1307,7 @@ char* esp8266ArtNetRDM::getShortName() {
 }
 
 
-void esp8266ArtNetRDM::setLongName(char* name) {
+void esp8266ArtNetRDM::setLongName(const char* name) {
   if (_art == 0)
     return;
   memcpy(_art->longName, name, ARTNET_LONG_NAME_LENGTH);

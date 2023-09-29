@@ -152,7 +152,7 @@ class esp8266ArtNetRDM {
     esp8266ArtNetRDM();
     ~esp8266ArtNetRDM();
     
-    void init(IPAddress, IPAddress, bool, char*, char*, uint16_t, uint16_t, uint8_t*);
+    void init(IPAddress, IPAddress, bool, const char*, const char*, uint16_t, uint16_t, uint8_t*);
     void init(IPAddress ip, IPAddress sub, bool dhcp, uint16_t oem, uint16_t esta, uint8_t* mac) {
       init(ip, sub, dhcp, "espArtNetNode", "espArtNetNode", oem, esta, mac);
     };
@@ -230,9 +230,9 @@ class esp8266ArtNetRDM {
     // Set Merge & node name
     void setMerge(uint8_t, uint8_t, bool);
     bool getMerge(uint8_t, uint8_t);
-    void setShortName(char*);
+    void setShortName(const char*);
     char* getShortName();
-    void setLongName(char*);
+    void setLongName(const char*);
     char* getLongName();
 
     // RDM functions
