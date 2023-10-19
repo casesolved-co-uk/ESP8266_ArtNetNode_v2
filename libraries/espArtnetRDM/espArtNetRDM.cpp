@@ -307,6 +307,8 @@ void esp8266ArtNetRDM::handler() {
     // Get the Op Code
     int opCode = _artOpCode(_artBuffer);
 
+    //DEBUG_MSG("Artnet 0x%04X\n", opCode);
+
     switch (opCode) {
 
       case ARTNET_ARTPOLL:

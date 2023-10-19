@@ -1,14 +1,17 @@
-var cl = 0;
-var num = 0;
-var err = 0;
-var o = document.getElementsByName('sections');
-var s = document.getElementsByName('save');
-for (var i = 0, e; e = s[i++];) e.addEventListener('click', function() {
-	sendData();
+// TODO: complete rewrite into class(es)
+
+let cl = 0;
+let num = 0;
+let err = 0;
+const o = document.getElementsByName('sections');
+const s = document.getElementsByName('save');
+for (const elem of s) elem.addEventListener('click', function(event) {
+	sendData(event.target);
 });
-var u = document.getElementById('fUp');
-var um = document.getElementById('uploadMsg');
-var fileSelect = document.getElementById('update');
+const u = document.getElementById('fUp');
+const um = document.getElementById('uploadMsg');
+const fileSelect = document.getElementById('update');
+let settings = {};
 u.addEventListener('click', function() {
 	uploadPrep()
 });
@@ -77,116 +80,119 @@ function add_modes() {
 
 function uploadPrep() {
 	if (fileSelect.files.length === 0) return;
-	u.disabled = !0;
+	u.disabled = true;
 	u.value = 'Preparing Device…';
-	var x = new XMLHttpRequest();
+	const x = new XMLHttpRequest();
 	x.onreadystatechange = function() {
 		if (x.readyState == XMLHttpRequest.DONE) {
+			let response;
 			try {
-				var r = JSON.parse(x.response)
+				response = JSON.parse(x.responseText)
 			} catch (e) {
-				var r = {
+				response = {
 					success: 0,
 					doUpdate: 1
 				}
 			}
-			if (r.success == 1 && r.doUpdate == 1) {
-				uploadWait()
+			if (response.success == 1 && response.doUpdate == 1) {
+				uploadWait();
 			} else {
 				um.value = '<b>Update failed!</b>';
 				u.value = 'Upload Now';
-				u.disabled = !1
+				u.disabled = false;
 			}
 		}
 	};
-	x.open('POST', '/ajax', !0);
+	x.open('POST', '/ajax');
 	x.setRequestHeader('Content-Type', 'application/json');
-	x.send('{\"doUpdate\":1,\"success\":1}')
+	x.send('{"doUpdate":1,"success":1}')
 }
 
 function uploadWait() {
 	setTimeout(function() {
-		var z = new XMLHttpRequest();
+		const z = new XMLHttpRequest();
 		z.onreadystatechange = function() {
 			if (z.readyState == XMLHttpRequest.DONE) {
+				let response;
 				try {
-					var r = JSON.parse(z.response)
+					response = JSON.parse(z.responseText)
 				} catch (e) {
-					var r = {
+					response = {
 						success: 0
 					}
 				}
-				if (r.success == 1) {
-					upload()
+				if (response.success == 1) {
+					upload();
 				} else {
-					uploadWait()
+					uploadWait();
 				}
 			}
 		};
-		z.open('POST', '/ajax', !0);
+		z.open('POST', '/ajax');
 		z.setRequestHeader('Content-Type', 'application/json');
-		z.send('{\"doUpdate\":2,\"success\":1}')
-	}, 1000)
+		z.send('{"doUpdate":2,"success":1}')
+	}, 5000)
 }
 
-var upload = function() {
+function upload() {
 	u.value = 'Uploading… 0%';
-	var data = new FormData();
+	const data = new FormData();
 	data.append('update', fileSelect.files[0]);
-	var x = new XMLHttpRequest();
+	const x = new XMLHttpRequest();
 	x.onreadystatechange = function() {
-		if (x.readyState == 4) {
+		if (x.readyState == XMLHttpRequest.DONE) {
+			let response;
 			try {
-				var r = JSON.parse(x.response)
+				response = JSON.parse(x.responseText)
 			} catch (e) {
-				var r = {
+				response = {
 					success: 0,
 					message: 'No response from device.'
 				}
 			}
-			if (r.success == 1) {
-				u.value = r.message;
+			if (response.success == 1) {
+				u.value = response.message;
 				setTimeout(function() {
 					location.reload()
 				}, 15000)
 			} else {
-				um.value = '<b>Update failed!</b> ' + r.message;
+				um.value = '<b>Update failed!</b> ' + response.message;
 				u.value = 'Upload Now';
-				u.disabled = !1
+				u.disabled = false;
 			}
 		}
 	};
 	x.upload.addEventListener('progress', function(e) {
-		var p = Math.ceil((e.loaded / e.total) * 100);
-		console.log('Progress: ' + p + '%');
+		const p = Math.ceil((e.loaded / e.total) * 100);
 		if (p < 100) u.value = 'Uploading... ' + p + '%';
 		else u.value = 'Upload complete. Processing…'
-	}, !1);
-	x.open('POST', '/upload', !0);
+	}, false);
+	x.open('POST', '/upload');
 	x.send(data)
 };
 
 function reboot() {
 	if (err == 1) return;
-	var r = confirm('Are you sure you want to reboot?');
-	if (r != true) return;
+	const r = confirm('Are you sure you want to reboot?');
+	if (!r) return;
 	o[cl].className = 'hide';
 	o[0].childNodes[0].innerHTML = 'Rebooting';
 	o[0].childNodes[1].innerHTML = 'Please wait while the device reboots. This page will refresh shortly unless you changed the IP or Wifi.';
 	o[0].className = 'show';
 	err = 0;
-	var x = new XMLHttpRequest();
+	const x = new XMLHttpRequest();
 	x.onreadystatechange = function() {
-		if (x.readyState == 4) {
+		if (x.readyState == XMLHttpRequest.DONE) {
+			let response;
 			try {
-				var r = JSON.parse(x.response);
+				const response = JSON.parse(x.responseText);
 			} catch (e) {
-				var r = {
+				const response = {
 					success: 0,
 					message: 'Unknown error: [' + x.responseText + ']'
 				};
 			}
-			if (r.success != 1) {
+			if (response.success != 1) {
 				o[0].childNodes[0].innerHTML = 'Reboot Failed';
 				o[0].childNodes[1].innerHTML = 'Something went wrong and the device didn\'t respond correctly. Please try again.';
 			}
@@ -195,45 +201,55 @@ function reboot() {
 			}, 5000);
 		}
 	};
-	x.open('POST', '/ajax', true);
+	x.open('POST', '/ajax');
 	x.setRequestHeader('Content-Type', 'application/json');
-	x.send('{\"reboot\":1,\"success\":1}');
+	x.send('{"reboot":1,"success":1}');
 }
 
-function sendData() {
-	var d = {
+function sendData(buttonClicked) {
+	const data = {
 		'page': num
 	};
-	for (var i = 0, e; e = o[cl].getElementsByTagName('INPUT')[i++];) {
-		var k = e.getAttribute('name');
-		var v = e.value;
-		if (k in d) continue;
-		if (k == 'ipAddress' || k == 'subAddress' || k == 'gwAddress' || k == 'portAuni' || k == 'portBuni' || k == 'portAsACNuni' || k == 'portBsACNuni' || k == 'dmxInBroadcast') {
-			var c = [v];
-			for (var z = 1; z < 4; z++) {
-				c.push(o[cl].getElementsByTagName('INPUT')[i++].value);
+	let button_found = false;
+	for (const elem of o[cl].getElementsByTagName('INPUT')) {
+		if (!button_found) {
+			if (buttonClicked.isSameNode(elem)) button_found = true;
+			continue;
+		}
+		const key = elem.getAttribute('name');
+		let value = elem.value;
+		if (Array.isArray(settings[key])) {
+			value = Number(value);
+			if (key in data) {
+				data[key].push(value);
+			} else {
+				data[key] = [value];
 			}
-			d[k] = c;
-		} else if (e.type === 'number') {
-			if (v == '') v = 0;
-			d[k] = v;
-		} else if (e.type === 'checkbox') {
-			if (e.checked) d[k] = 1;
-			else d[k] = 0;
+		} else if (elem.type === 'number') {
+			data[key] = Number(value);
+		} else if (elem.type === 'checkbox') {
+			if (elem.checked) data[key] = 1;
+			else data[key] = 0;
+		} else if (elem.type === 'button') {
+			// stop at the next button
+			break;
 		} else
-			d[k] = v;
+			data[key] = value;
 	}
-	for (var i = 0, e; e = o[cl].getElementsByTagName('SELECT')[i++];) {
-		d[e.getAttribute('name')] = e.options[e.selectedIndex].value;
+	// does not cater for multiple buttons
+	for (const elem of o[cl].getElementsByTagName('SELECT')) {
+		data[elem.getAttribute('name')] = Number(elem.options[elem.selectedIndex].value);
 	}
-	d['success'] = 1;
-	var x = new XMLHttpRequest();
-	x.onreadystatechange = function() {
-		handleAJAX(x);
+	data['success'] = 1;
+	const x = new XMLHttpRequest();
+	x.onreadystatechange = () => {
+		if (x.readyState == XMLHttpRequest.DONE) {
+			loadSettings([x, buttonClicked]);
+		}
 	};
 	x.open('POST', '/ajax');
 	x.setRequestHeader('Content-Type', 'application/json');
-	x.send(JSON.stringify(d));
+	x.send(JSON.stringify(data));
 }
 
 function menuClick(n) {
@@ -245,7 +261,7 @@ function menuClick(n) {
 		o[0].className = 'show';
 		cl = 0;
 	}, 100);
-	var x = new XMLHttpRequest();
+	const x = new XMLHttpRequest();
 	x.onreadystatechange = function() {
 		handleAJAX(x);
 	};
@@ -254,14 +270,17 @@ function menuClick(n) {
 	x.send(JSON.stringify({"page":num,"success":1}));
 }
 
-function loadDebugLog() {
+function misc() {
 	// page 8 'save' button click goes to standard ajax handler
-	const section = document.getElementById('section_debug');
+	const section = document.getElementById('misc');
 	num = 8;
 	o[cl].className = 'hide';
 	section.className = 'show';
 	cl = 8;
+	loadDebugLog();
+}
 
+function loadDebugLog() {
 	const x = new XMLHttpRequest();
 	x.onreadystatechange = function() {
 		if (x.readyState == XMLHttpRequest.DONE && x.status == 200) {
@@ -273,15 +292,136 @@ function loadDebugLog() {
 	x.send();
 }
 
+// Settings are loaded from settings.json in two scenarios:
+// 1. page is changed (menuclick)
+// 2. data is saved (button click)
+function loadSettings(inp) {
+	const x = new XMLHttpRequest();
+	x.onreadystatechange = () => {
+		if (x.readyState == XMLHttpRequest.DONE) {
+			updateUI(x);
+			if (typeof inp === "number") menuClick(inp);
+			else handleAJAX(...inp); // array [x, buttonClicked]
+		}
+	};
+	x.open('GET', '/settings.json');
+	x.setRequestHeader('Content-Type', 'application/json');
+	x.send();
+}
+
+function updateUI(request) {
+	if (request.readyState == XMLHttpRequest.DONE) {
+		if (request.status == 200) {
+			const response = JSON.parse(request.responseText);
+			// response could be a full settings
+			for (let key in response) {
+
+				const input = document.getElementsByName(key);
+				// most likely an empty list:
+				let stat = document.getElementsByName(key + 'T');
+
+				// Special processing
+				if (key === "success" || key == "message") {
+					// don't save
+				} else if (key === "isHotspot") {
+					if (response[key]) {
+						settings["wifiStatus"] = `Hotspot started, SSID: ${settings['hotspotSSID']}`;
+					} else {
+						settings["wifiStatus"] = `Wifi connected, SSID: ${settings['wifiSSID']}`;
+					}
+					key = "wifiStatus";
+				} else {
+					// merge into settings
+					settings[key] = response[key];
+				}
+
+				// run on everything
+				for (let z = 0; z < input.length; z++) {
+					switch (input[z].nodeName) {
+						case 'P':
+						case 'DIV':
+							input[z].innerHTML = settings[key];
+							break;
+						case 'INPUT':
+							if (input[z].type == 'checkbox') input[z].checked = Boolean(settings[key]);
+							else input[z].value = settings[key];
+							break;
+						case 'SELECT':
+							for (let y = 0; y < input[z].options.length; y++) {
+								if (input[z].options[y].value == settings[key]) {
+									input[z].options.selectedIndex = y;
+									break;
+								}
+							}
+							break;
+					} // switch
+				} // for elem
+
+				if (Array.isArray(settings[key])) {
+					for (let z = 0; z < settings[key].length; z++) {
+						if (input.length) input[z].value = settings[key][z];
+						if (stat.length) {
+							if (z == 0) stat[0].innerHTML = '';
+							else stat[0].innerHTML = stat[0].innerHTML + '.';
+							stat[0].innerHTML = stat[0].innerHTML + settings[key][z];
+						}
+					}
+					continue;
+				} else if (key.startsWith("port")) {
+					const chan = key[4];
+					if (key.endsWith("mode")) {
+						const pix = document.getElementsByName("port" + chan + "pix");
+						const bcaddr = document.getElementsByName("DmxInBcAddr");
+						stat = document.getElementsByName("port" + chan + "Status");
+						const status_num = Number(settings[key]);
+						let status_str;
+						if (pix.length && status_num >= 30) { // LED mode
+							for (const elem of pix) elem.style.display = '';
+						} else {
+							for (const elem of pix) elem.style.display = 'none';
+						}
+						if (bcaddr.length && status_num == 2) { // DMX In
+							bcaddr[0].style.display = '';
+						} else {
+							bcaddr[0].style.display = 'none';
+						}
+						// portAStatus portBStatus, same as mode, decode from number unless string
+						if (status_num === NaN) {
+							status_str = settings[key];
+						} else {
+							status_str = mode_map[status_num];
+						}
+						if (stat.length) {
+							for (let z = 0; z < stat.length; z++) {
+								stat[z].innerHTML = status_str;
+							}
+						}
+					}
+				} else if (key === "numPorts" && settings[key] === 1) {
+					// Remove Port B
+					for (const elem of document.getElementsByName("portB")) {
+						elem.style.display = 'none';
+					}
+				}
+			} // for key
+		} // status == 200
+		else { // request status error
+			err = 1;
+			o[cl].className = 'hide';
+			document.getElementsByName('error')[0].className = 'show';
+		}
+	} // ajax = DONE
+}
+
 function isVisible(e) {
 	const style = window.getComputedStyle(e);
 	return (style.display !== 'none');
 }
 
-function handleAJAX(x) {
+function handleAJAX(x, triggerElement = null) {
 	if (x.readyState == XMLHttpRequest.DONE) {
 		if (x.status == 200) {
-			var response = JSON.parse(x.responseText);
+			const response = JSON.parse(x.responseText);
 			if (!response.hasOwnProperty('success')) {
 				err = 1;
 				o[cl].className = 'hide';
@@ -296,17 +436,19 @@ function handleAJAX(x) {
 				return;
 			}
 			if (response.hasOwnProperty('message')) {
-				let old_text;
-				let button_element;
-				for (var i = 0, e; e = s[i++];) {
-					if (isVisible(e)) {
-						old_text = e.value;
-						button_element = e;
-						e.value = response['message'];
-						e.className = 'showMessage';
+				let button_element = triggerElement;
+				let old_text = triggerElement.value;
+				if (!button_element) {
+					for (const elem of s) {
+						if (isVisible(elem)) {
+							old_text = elem.value;
+							button_element = elem;
+						}
 					}
 				}
-				setTimeout(function() {
+				button_element.value = response['message'];
+				button_element.className = 'showMessage';
+				setTimeout(() => {
 					button_element.value = old_text;
 					button_element.className = '';
 				}, 5000);
@@ -314,111 +456,22 @@ function handleAJAX(x) {
 			o[cl].className = 'hide';
 			o[num].className = 'show';
 			cl = num;
-			for (var key in response) {
-				if (response.hasOwnProperty(key)) {
-					var a = document.getElementsByName(key);
-					if (key == 'ipAddress' || key == 'subAddress') {
-						var b = document.getElementsByName(key + 'T');
-						for (var z = 0; z < 4; z++) {
-							a[z].value = response[key][z];
-							if (z == 0) b[0].innerHTML = '';
-							else b[0].innerHTML = b[0].innerHTML + ' . ';
-							b[0].innerHTML = b[0].innerHTML + response[key][z];
-						}
-						continue;
-					} else if (key == 'bcAddress') {
-						for (var z = 0; z < 4; z++) {
-							if (z == 0) a[0].innerHTML = '';
-							else a[0].innerHTML = a[0].innerHTML + ' . ';
-							a[0].innerHTML = a[0].innerHTML + response[key][z];
-						}
-						continue;
-					} else if (key == 'gwAddress' || key == 'dmxInBroadcast' || key == 'portAuni' || key == 'portBuni' || key == 'portAsACNuni' || key == 'portBsACNuni') {
-						for (var z = 0; z < 4; z++) {
-							a[z].value = response[key][z];
-						}
-						continue
-					}
-					if (key == 'portAmode') {
-						var b = document.getElementsByName('portApix');
-						var c = document.getElementsByName('DmxInBcAddrA');
-						if (response[key] >= 30) { // LED mode
-							b[0].style.display = '';
-							b[1].style.display = '';
-						} else {
-							b[0].style.display = 'none';
-							b[1].style.display = 'none';
-						}
-						if (response[key] == 2) { // DMX In
-							c[0].style.display = '';
-						} else {
-							c[0].style.display = 'none';
-						}
-					} else if (key == 'portBmode') {
-						var b = document.getElementsByName('portBpix');
-						if (response[key] >= 30) { // LED mode
-							b[0].style.display = '';
-							b[1].style.display = '';
-						} else {
-							b[0].style.display = 'none';
-							b[1].style.display = 'none';
-						}
-					} else if (key.startsWith("port") && key.endsWith("Status")) { // portAStatus portBStatus, same as mode, decode from number unless string
-						const status_num = Number(response[key]);
-						let status_str;
-						if (status_num === NaN) {
-							status_str = response[key];
-						} else {
-							status_str = mode_map[status_num];
-						}
-						for (let z = 0; z < a.length; z++) {
-							a[z].innerHTML = status_str;
-						}
-					} else {
-						for (var z = 0; z < a.length; z++) {
-							switch (a[z].nodeName) {
-								case 'P':
-								case 'DIV':
-									a[z].innerHTML = response[key];
-									break;
-								case 'INPUT':
-									if (a[z].type == 'checkbox') {
-										if (response[key] == 1) a[z].checked = true;
-										else a[z].checked = false;
-									} else a[z].value = response[key];
-									break;
-								case 'SELECT':
-									for (var y = 0; y < a[z].options.length; y++) {
-										if (a[z].options[y].value == response[key]) {
-											a[z].options.selectedIndex = y;
-											break;
-										}
-									}
-									break;
-							}
-						}
-					}
-				}
-			}
-		} else {
-			err = 1;
-			o[cl].className = 'hide';
-			document.getElementsByName('error')[0].className = 'show';
+			updateUI(x);
 		}
 	}
 }
-var update = document.getElementById('update');
-var label = update.nextElementSibling;
-var labelVal = label.innerHTML;
+const update = document.getElementById('update');
+const label = update.nextElementSibling;
+const labelVal = label.innerHTML;
 update.addEventListener('change', function(e) {
-	var fileName = e.target.value.split('\\\\').pop();
+	const fileName = e.target.value.split('\\\\').pop();
 	if (fileName) label.querySelector('span').innerHTML = fileName;
 	else label.innerHTML = labelVal;
 	update.blur();
 });
 document.onkeydown = function(e) {
 	if (cl < 2 || cl > 6) return;
-	var e = e || window.event;
+	e = e || window.event;
 	if (e.keyCode == 13) sendData();
 };
-menuClick(1);
+loadSettings(1);

@@ -16,15 +16,203 @@ If not, see http://www.gnu.org/licenses/
 Artnet handlers
 */
 
+#include "store.h"
+
+
+void artStart() {
+  char buf[ARTNET_NODE_REPORT_LENGTH];
+  uint16_t art_code;
+
+  DEBUG_LN("Starting Artnet...");
+  // Initialise out ArtNet
+  artRDM.init(ip, subnet, isHotspot ? true : (uint8_t)deviceSettings[dhcpEnable], (const char*)deviceSettings[nodeName], (const char*)deviceSettings[longName], ARTNET_OEM, ESTA_MAN, MAC_array);
+
+  // Set firmware
+  artRDM.setFirmwareVersion(ART_FIRM_VERSION);
+
+  /************* PORT A *************/
+  // Add Group
+  portA[0] = artRDM.addGroup((uint8_t)deviceSettings[portAnet], (uint8_t)deviceSettings[portAsub]);
+  
+  bool e131 = ((uint8_t)deviceSettings[portAprot] == PROT_ARTNET_SACN) ? true : false;
+
+  // LED modes advertise mode TYPE_DMX_OUT - the rest use the value assigned
+  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START)
+    portA[1] = artRDM.addPort(portA[0], 0, deviceSettings[portAuni][0], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+  else
+    portA[1] = artRDM.addPort(portA[0], 0, deviceSettings[portAuni][0], (uint8_t)deviceSettings[portAmode], (uint8_t)deviceSettings[portAmerge]);
+
+  artRDM.setE131(portA[0], portA[1], e131);
+  artRDM.setE131Uni(portA[0], portA[1], deviceSettings[portAsACNuni][0]);
+  
+  // Add extra Artnet ports for long LED strips
+  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START && (uint8_t)deviceSettings[portApixMode] == FX_MODE_PIXEL_MAP) {
+    if ((uint16_t)deviceSettings[portAnumPix] > 170) {
+      portA[2] = artRDM.addPort(portA[0], 1, deviceSettings[portAuni][1], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+
+      artRDM.setE131(portA[0], portA[2], e131);
+      artRDM.setE131Uni(portA[0], portA[2], deviceSettings[portAsACNuni][1]);
+    }
+    if ((uint16_t)deviceSettings[portAnumPix] > 340) {
+      portA[3] = artRDM.addPort(portA[0], 2, deviceSettings[portAuni][2], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+
+      artRDM.setE131(portA[0], portA[3], e131);
+      artRDM.setE131Uni(portA[0], portA[3], deviceSettings[portAsACNuni][2]);
+    }
+    if (deviceSettings[portAnumPix] > 510) {
+      portA[4] = artRDM.addPort(portA[0], 3, deviceSettings[portAuni][3], TYPE_DMX_OUT, (uint8_t)deviceSettings[portAmerge]);
+
+      artRDM.setE131(portA[0], portA[4], e131);
+      artRDM.setE131Uni(portA[0], portA[4], deviceSettings[portAsACNuni][3]);
+    }
+  }
+
+
+  /************* PORT B *************/
+  #ifndef ONE_PORT
+    // Add Group
+    portB[0] = artRDM.addGroup(deviceSettings[portBnet], deviceSettings[portBsub]);
+    e131 = ((uint8_t)deviceSettings[portBprot] == PROT_ARTNET_SACN) ? true : false;
+    
+    // LED modes advertise mode TYPE_DMX_OUT - the rest use the value assigned
+    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START)
+      portB[1] = artRDM.addPort(portB[0], 0, deviceSettings[portBuni][0], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
+    else
+      portB[1] = artRDM.addPort(portB[0], 0, deviceSettings[portBuni][0], (uint8_t)deviceSettings[portBmode], (uint8_t)deviceSettings[portBmerge]);
+
+    artRDM.setE131(portB[0], portB[1], e131);
+    artRDM.setE131Uni(portB[0], portB[1], deviceSettings[portBsACNuni][0]);
+  
+    // Add extra Artnet ports for long LED strips
+    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START && (uint8_t)deviceSettings[portBpixMode] == FX_MODE_PIXEL_MAP) {
+      if (deviceSettings[portBnumPix] > 170) {
+        portB[2] = artRDM.addPort(portB[0], 1, deviceSettings[portBuni][1], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
+        
+        artRDM.setE131(portB[0], portB[2], e131);
+        artRDM.setE131Uni(portB[0], portB[2], deviceSettings[portBsACNuni][1]);
+      }
+      if (deviceSettings[portBnumPix] > 340) {
+        portB[3] = artRDM.addPort(portB[0], 2, deviceSettings[portBuni][2], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
+        
+        artRDM.setE131(portB[0], portB[3], e131);
+        artRDM.setE131Uni(portB[0], portB[3], deviceSettings[portBsACNuni][2]);
+      }
+      if (deviceSettings[portBnumPix] > 510) {
+        portB[4] = artRDM.addPort(portB[0], 3, deviceSettings[portBuni][3], TYPE_DMX_OUT, (uint8_t)deviceSettings[portBmerge]);
+        
+        artRDM.setE131(portB[0], portB[4], e131);
+        artRDM.setE131Uni(portB[0], portB[4], deviceSettings[portBsACNuni][3]);
+      }
+    }
+  #endif
+
+  // Add required RDM callback functions
+  artRDM.setArtDMXCallback(dmxHandle);          // Consume DMX for local lights
+  artRDM.setArtRDMCallback(rdmHandle);          // RDM to DMX routing
+  artRDM.setArtSyncCallback(syncHandle);        // Local light sync
+  artRDM.setArtIPCallback(ipHandle);            // DHCP
+  artRDM.setArtAddressCallback(addressHandle);  // IP Settings
+  artRDM.setTODRequestCallback(todRequest);     // Table of devices
+  artRDM.setTODFlushCallback(todFlush);
+
+  resetDecode(buf, &art_code);
+  artRDM.setNodeReport(buf, art_code);
+
+  // Start artnet
+  artRDM.begin();
+
+  delay(10);
+}
+
+void doNodeReport() {
+  if (nextNodeReport > millis())
+    return;
+  
+  char c[ARTNET_NODE_REPORT_LENGTH];
+
+  if (nodeErrorTimeout > millis())
+    nextNodeReport = millis() + 2000;
+  else
+    nextNodeReport = millis() + 5000;
+  
+  if (nodeError[0] != '\0' && !nodeErrorShowing && nodeErrorTimeout > millis()) {
+    
+    nodeErrorShowing = true;
+    strcpy(c, nodeError);
+    
+  } else {
+    nodeErrorShowing = false;
+    
+    strcpy(c, "OK: PortA:");
+
+    switch ((uint8_t)deviceSettings[portAmode]) {
+      case TYPE_DMX_OUT:
+        sprintf(c, "%s DMX Out", c);
+        break;
+      
+      case TYPE_RDM_OUT:
+        sprintf(c, "%s RDM Out", c);
+        break;
+      
+      case TYPE_DMX_IN:
+        sprintf(c, "%s DMX In", c);
+        break;
+      
+      default:
+        if ((uint8_t)deviceSettings[portApixMode] == FX_MODE_12) {
+          sprintf(c, "%s 12chan", c);
+        } else {
+          sprintf(c, "%s RGBLED %ipixels", c, (uint16_t)deviceSettings[portAnumPix]);
+        }
+        break;
+    }
+  
+    #ifndef ONE_PORT
+      sprintf(c, "%s. PortB:", c);
+      
+      switch ((uint8_t)deviceSettings[portBmode]) {
+        case TYPE_DMX_OUT:
+          sprintf(c, "%s DMX Out", c);
+          break;
+        
+        case TYPE_RDM_OUT:
+          sprintf(c, "%s RDM Out", c);
+          break;
+
+        case TYPE_DMX_IN:
+          sprintf(c, "%s DMX In", c);
+          break;
+
+        default:
+          if ((uint8_t)deviceSettings[portBpixMode] == FX_MODE_12) {
+            sprintf(c, "%s 12chan", c);
+          } else {
+            sprintf(c, "%s RGBLED %ipixels", c, (uint16_t)deviceSettings[portBnumPix]);
+          }
+          break;
+      }
+    #endif
+  }
+  
+  artRDM.setNodeReport(c, ARTNET_RC_POWER_OK);
+}
+
+
 void enable_dhcp() {
   // save() is done outside
   deviceSettings[dhcpEnable] = 1;
   gateway = INADDR_NONE;
 }
 
-
-
 void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled) {
+  #ifdef DEBUG_ESP_PORT
+  static uint32_t _count = 0;
+  if (_count % 100 == 0) {
+    DEBUG_MSG("ArtDMX grp: %u port: %u num %u sync %u\n", group, port, numChans, syncEnabled);
+  }
+  _count++;
+  #endif
+
   if (portA[0] == group) {
     if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START) {
       
@@ -138,7 +326,6 @@ void syncHandle() {
 void ipHandle() {
   if (artRDM.getDHCP()) {
     enable_dhcp();
-    doReboot = true;
   } else {
     // fool conversions into saving the new info
     deviceSettings[dhcpEnable] = 1;
@@ -149,12 +336,11 @@ void ipHandle() {
     gateway[3] = 1;
     conversions();
     deviceSettings[dhcpEnable] = 0;
-    
-    doReboot = true;
   }
 
   // Store everything to EEPROM
-  save();
+  doSave = 1;
+  doReboot = 1;
 }
 
 void addressHandle() {
@@ -185,7 +371,7 @@ void addressHandle() {
   #endif
   
   // Store everything to EEPROM
-  save();
+  doSave = true;
 }
 
 void rdmHandle(uint8_t group, uint8_t port, rdm_data* c) {

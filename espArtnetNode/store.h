@@ -25,8 +25,11 @@ Constants
 // Dont change this
 #define CONFIG_START 0
 
-// from defaults.json file
-#define CONFIG_SIZE 1200
+// from minified defaults.json file
+// also see DYNAMIC_JSON_DOCUMENT_SIZE
+// EEPROM sector size is 4096: SPI_FLASH_SEC_SIZE
+// Cannot read/write more than this at a time
+#define CONFIG_SIZE 1024
 
 enum fx_mode {
   FX_MODE_PIXEL_MAP = 0,
@@ -51,6 +54,7 @@ enum p_merge {
   MERGE_HTP = 1
 };
 
+void conversions(bool init = false);
 
 // Settings Keywords
 const char ipAddress[] = "ipAddress";

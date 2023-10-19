@@ -18,22 +18,36 @@ For storing a debug log in the SPIFFS
 #ifndef debugLog_h
 #define debugLog_h
 
+extern char* stack_start;
+
 // debug helper
 const char got_here_u8[] PROGMEM = "Got here %d";
 const char got_here_u32[] PROGMEM = "Got here %08" PRIx32;
+const char startup[] = "Startup";
 
-typedef enum {
+#ifdef DEBUG_ESP_PORT
+  #define DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
+  #define DEBUG_LN( X ) DEBUG_ESP_PORT.println( X )
+#else
+  #define DEBUG_MSG(...)
+  #define DEBUG_LN( X )
+#endif
+
+typedef enum loglevel_t {
   LOG_DEBUG = 0,
   LOG_INFO,
   LOG_WARN,
   LOG_ERROR
 } loglevel_t;
 
-const char* loglevelstr[] = {
-  "DEBUG", 
-  "INFO",
-  "WARN",
-  "ERROR"
-};
+void os_log(const char c);
+void os_log_write();
+void log_ls(char const* path);
+void log_meminfo(const char* context);
+void log_u8_P(const loglevel_t level, const char* context, const char* msg, uint8_t num);
+int debugLog(const loglevel_t level, const char* context, const char* text);
+int debugLog_P(const loglevel_t level, const char* context, const char* text);
+void debugLogSetup();
+bool debugLogClear();
 
 #endif

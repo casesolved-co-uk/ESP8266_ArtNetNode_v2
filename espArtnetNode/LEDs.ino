@@ -24,20 +24,61 @@ const char toobig_err[] PROGMEM = "Too much LED data: %d";
 
 // Status, channel A & B
 CLEDController* led_controllers[NUM_STATUS_LEDS];
-uint8_t STATUS_BRIGHTNESS = 64;
-uint8_t MAX_BRIGHTNESS = 255;
+uint32_t statusTimer = 0;
 
 #ifdef STATUS_LED_MODE
   CRGB status_leds[NUM_STATUS_LEDS];
 #endif
 
 
+void LEDhandler() {
+  // Do Pixel FX on port A
+  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START && (uint8_t)deviceSettings[portApixMode] != FX_MODE_PIXEL_MAP) {
+    if (pixFXA.Update())
+      pixDone = 0;
+  }
+
+  // Do Pixel FX on port B
+  #ifndef ONE_PORT
+    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START && (uint8_t)deviceSettings[portBpixMode] != FX_MODE_PIXEL_MAP) {
+      if (pixFXB.Update())
+        pixDone = 0;
+    }
+  #endif
+
+  // Do pixel string output
+  if (!pixDone)
+    pixDone = show_LEDs();
+}
+
+
+void statusLED() {
+#ifdef STATUS_LED_MODE
+  // Output status to LEDs once per second
+  if (statusTimer < millis()) {
+
+    // Flash our main status LED
+    if ((statusTimer % 2000) > 1000)
+      setStatusLed(STATUS_LED_S, CRGB::Black);
+    else if (nodeError[0] != '\0')
+      setStatusLed(STATUS_LED_S, CRGB::Red);
+    else
+      setStatusLed(STATUS_LED_S, CRGB::Green);
+
+    doStatusLedOutput();
+    statusTimer = millis() + 1000;
+  }
+#endif
+}
+
+
 void LEDSetup() {
+  DEBUG_LN("Starting status LEDs...");
   memset(led_controllers, 0, sizeof(CLEDController*) * NUM_STATUS_LEDS);
   
 #ifdef STATUS_LED_MODE
   // Status LEDs
-  led_controllers[STATUS_LED_S] = &FastLED.addLeds<STATUS_LED_MODE, STATUS_LED_PIN, BGR>(status_leds, NUM_STATUS_LEDS);
+  led_controllers[STATUS_LED_S] = &FastLED.addLeds<STATUS_LED_MODE, STATUS_LED_PIN, GRB>(status_leds, NUM_STATUS_LEDS);
   // see color.h
   led_controllers[STATUS_LED_S]->setCorrection(0xFFFFF0);
 
@@ -65,7 +106,6 @@ void stop_LEDs() {
  * Cannot be parameterised due to pin number being required at compile time in addLeds template
  * Each addLeds line requires program space so keep to realistic minimum
  */
-// TODO: input, save and set colour correction & temperature
 void led_controller_A() {
   digitalWrite(DMX_DIR_A, HIGH);
   // Dynamically allocate LED data array
@@ -76,7 +116,7 @@ void led_controller_A() {
     case 36: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2811, DMX_TX_A, RGB>(mem, deviceSettings[portAnumPix]); break; }
     case 40: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2812, DMX_TX_A, RGB>(mem, deviceSettings[portAnumPix]); break; }
     case 48: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2813, DMX_TX_A, RGB>(mem, deviceSettings[portAnumPix]); break; }
-    default: { log_u8_P(LOG_ERROR, "LEDA", type_err, deviceSettings[portAmode]); return; }
+    default: { log_u8_P(LOG_ERROR, "LEDA", type_err, (uint8_t)deviceSettings[portAmode]); return; }
   }
   led_controllers[STATUS_LED_A]->setCorrection(portAcorrect);
   led_controllers[STATUS_LED_A]->setTemperature(portAtemperature);
@@ -92,7 +132,7 @@ void led_controller_B() {
     case 36: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2811, DMX_TX_B, RGB>(mem, deviceSettings[portBnumPix]); break; }
     case 40: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2812, DMX_TX_B, RGB>(mem, deviceSettings[portBnumPix]); break; }
     case 48: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2813, DMX_TX_B, RGB>(mem, deviceSettings[portBnumPix]); break; }
-    default: { log_u8_P(LOG_ERROR, "LEDB", type_err, deviceSettings[portBmode]); return; }
+    default: { log_u8_P(LOG_ERROR, "LEDB", type_err, (uint8_t)deviceSettings[portBmode]); return; }
   }
   led_controllers[STATUS_LED_B]->setCorrection(portBcorrect);
   led_controllers[STATUS_LED_B]->setTemperature(portBtemperature);
@@ -137,7 +177,7 @@ bool show_LEDs(uint8_t controller_idx) {
     return false;
   }
 
-  controller->showLeds(MAX_BRIGHTNESS);
+  controller->showLeds((uint8_t)deviceSettings[maxBright]);
   return true;
 }
 
@@ -150,6 +190,6 @@ void setStatusLed(uint8_t num, CRGB::HTMLColorCode col) {
 
 void doStatusLedOutput() {
 #ifdef STATUS_LED_MODE
-  led_controllers[STATUS_LED_S]->showLeds(STATUS_BRIGHTNESS);
+  led_controllers[STATUS_LED_S]->showLeds((uint8_t)deviceSettings[statusBright]);
 #endif
 }

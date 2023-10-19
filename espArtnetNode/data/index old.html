@@ -33,11 +33,11 @@
 							<a href='javascript:menuClick(3)'>IP & Name</a>
 						</li>
 						<li>
-							<a href="javascript: new portHandler('portA')">Port A</a>
+							<a href='javascript:menuClick(4)'>Port A</a>
 						</li>
 						<!-- Remove if ONE_PORT is defined -->
 						<li name="portB">
-							<a href="javascript: new portHandler('portB')">Port B</a>
+							<a href='javascript:menuClick(5)'>Port B</a>
 						</li>
 						<li name="portC" style="display: none;">
 							<a href='javascript:menuClick(5)'>Port C</a>
@@ -65,12 +65,12 @@
 						<h2>Error</h2>
 						<p class="center">There was an error communicating with the device. Refresh the page and try again.</p>
 					</div>
-					<div class="hide" name="sections">
+					<div class="show" name="sections">
 						<h2>Fetching Data</h2>
 						<p class="center">Fetching data from device. If this message is still here in 15 seconds, try refreshing the page or clicking the menu option again.</p>
 					</div>
 
-					<div id="status1" class="hide" name="sections">
+					<div id="status" class="hide" name="sections">
 						<h2>Device Status</h2>
 						<p class="left">Device Name:</p>
 						<p class="right" name="nodeName"></p>
@@ -99,7 +99,7 @@
 						<p class="right" name="firmwareStatus"></p>
 					</div>
 
-					<div id="wifi2" class="hide" name="sections">
+					<div id="wifi" class="hide" name="sections">
 						<input name="save" type="button" value='Save Changes'>
 						<h2>WiFi Settings</h2>
 						<p class="left">MAC Address:</p>
@@ -123,7 +123,7 @@
 						<p class="right">Stand alone mode disables the primary WiFi connection and allows ArtNet data to be received via the hotspot connection.</p>
 					</div>
 
-					<div id="ip3" class="hide" name="sections">
+					<div id="ip" class="hide" name="sections">
 						<input name="save" type="button" value='Save Changes'>
 						<h2>IP & Node Name</h2>
 						<p class='left'>Short Name:</p>
@@ -164,13 +164,13 @@
 						<h2>Port A Settings</h2>
 						<p class="left">Port Type:</p>
 						<p class="right">
-							<select class="select" name="portAmode"><!-- Options from JS --></select>
+							<select id="portAmode" class="select" name="portAmode"><!-- Options from JS --></select>
 						</p>
 						<p class="left">Protocol:</p>
 						<p class="right">
 							<select class="select" name="portAprot">
 								<option value="0">Artnet v4</option>
-								<option value="1">Artnet v4 with sACN</option>
+								<option value="1">Artnet v4 with sACN DMX</option>
 							</select>
 						</p>
 						<p class="left">Merge Mode:</p>
@@ -180,30 +180,28 @@
 								<option value="1">Merge HTP</option>
 							</select>
 						</p>
-						<p class="left">Node Net:</p>
-						<p class="right"><input name="portAnet" type="number" min="0" max="127" class="number">(bits 8-14)</p>
-						<p class="left">Node Subnet:</p>
-						<p class="right"><input name="portAsub" type="number" min="0" max="15" class="number">(bits 4-7)</p>
-						<p class="left">Universes (addr):</p>
+						<p class="left">Net:</p>
+						<p class="right"><input name="portAnet" type="number" min="0" max="127" class="number"></p>
+						<p class="left">Subnet:</p>
+						<p class="right"><input name="portAsub" type="number" min="0" max="15" class="number"></p>
+						<p class="left">Universe:</p>
 						<p class="right">
-							<input type="number" min="0" max="15" name="portAuni" class="number"><span class="uniaddr"></span>
-							<span name="portpix">
-								<input type="number" min="0" max="15" name="portAuni" class="number"><span class="uniaddr"></span>
-								<input type="number" min="0" max="15" name="portAuni" class="number"><span class="uniaddr"></span>
-								<input type="number" min="0" max="15" name="portAuni" class="number"><span class="uniaddr"></span>
+							<input type="number" min="0" max="15" name="portAuni" class="number">
+							<span name="portApix">
+								<input type="number" min="0" max="15" name="portAuni" class="number">
+								<input type="number" min="0" max="15" name="portAuni" class="number">
+								<input type="number" min="0" max="15" name="portAuni" class="number">
 							</span>
 						</p>
-						<p class="left">sACN Universes:</p>
+						<p class="left">sACN Universe:</p>
 						<p class="right">
 							<input type="number" min="0" max="63999" name="portAsACNuni" class="number">
-							<span name="portpix">
-								<input type="number" min="1" max="63999" name="portAsACNuni" class="number">
-								<input type="number" min="1" max="63999" name="portAsACNuni" class="number">
-								<input type="number" min="1" max="63999" name="portAsACNuni" class="number">
-							</span>
+							<input type="number" min="1" max="63999" name="portAsACNuni" class="number">
+							<input type="number" min="1" max="63999" name="portAsACNuni" class="number">
+							<input type="number" min="1" max="63999" name="portAsACNuni" class="number">
 						</p>
 						<span name="DmxInBcAddr">
-							<p class="left">DMX In Address:</p>
+							<p class="left">Broadcast Address:</p>
 							<p class="right">
 								<input type="number" min="0" max="255" name="dmxInBroadcast" class="number">
 								<input type="number" min="0" max="255" name="dmxInBroadcast" class="number">
@@ -211,9 +209,9 @@
 								<input type="number" min="0" max="255" name="dmxInBroadcast" class="number">
 							</p>
 						</span>
-						<span name="portpix">
+						<span name="portApix">
 							<p class="left">Number of Pixels:</p>
-							<p class="right"><input type="number" min="0" max="680" name="portAnumPix" class="number">680 max, 170 per universe (4 universes)</p>
+							<p class="right"><input type="number" min="0" max="680" name="portAnumPix" class="number">680 max - 170 per universe</p>
 							<p class="left">Colour Correction:</p>
 							<p class="right"><input type="color" name="portAcorrection" value="#FFFFFF">See <a href="https://github.com/FastLED/FastLED/blob/master/src/color.h" target="_blank">FastLED color.h</a></p>
 							<p class="left">White Temperature:</p>
@@ -235,7 +233,7 @@
 						<h2>Port B Settings</h2>
 						<p class="left">Port Type:</p>
 						<p class="right">
-							<select class="select" name="portBmode"><!-- Options from JS --></select>
+							<select id="portBmode" class="select" name="portBmode"><!-- Options from JS --></select>
 						</p>
 						<p class="left">Protocol:</p>
 						<p class="right">
@@ -251,27 +249,25 @@
 								<option value="1">Merge HTP</option>
 							</select>
 						</p>
-						<p class="left">Node Net:</p>
-						<p class="right"><input name="portBnet" type="number" min="0" max="127" class="number">(bits 8-14)</p>
-						<p class="left">Node Subnet:</p>
-						<p class="right"><input name="portBsub" type="number" min="0" max="15" class="number">(bits 4-7)</p>
-						<p class="left">Universes (addr):</p>
+						<p class="left">Net:</p>
+						<p class="right"><input name="portBnet" type="number" min="0" max="127" class="number"></p>
+						<p class="left">Subnet:</p>
+						<p class="right"><input name="portBsub" type="number" min="0" max="15" class="number"></p>
+						<p class="left">Universe:</p>
 						<p class="right">
-							<input type="number" min="0" max="15" name="portBuni" class="number"><span class="uniaddr"></span>
-							<span name="portpix">
-								<input type="number" min="0" max="15" name="portBuni" class="number"><span class="uniaddr"></span>
-								<input type="number" min="0" max="15" name="portBuni" class="number"><span class="uniaddr"></span>
-								<input type="number" min="0" max="15" name="portBuni" class="number"><span class="uniaddr"></span>
+							<input type="number" min="0" max="15" name="portBuni" class="number">
+							<span name="portBpix">
+								<input type="number" min="0" max="15" name="portBuni" class="number">
+								<input type="number" min="0" max="15" name="portBuni" class="number">
+								<input type="number" min="0" max="15" name="portBuni" class="number">
 							</span>
 						</p>
-						<p class="left">sACN Universes:</p>
+						<p class="left">sACN Universe:</p>
 						<p class="right">
 							<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
-							<span name="portpix">
-								<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
-								<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
-								<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
-							</span>
+							<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
+							<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
+							<input type="number" min="1" max="63999" name="portBsACNuni" class="number">
 						</p>
 						<span name="DmxInBcAddr">
 							<p class="left">Broadcast Address:</p>
@@ -282,9 +278,9 @@
 								<input type="number" min="0" max="255" name="dmxInBroadcast" class="number">
 							</p>
 						</span>
-						<span name="portpix">
+						<span name="portBpix">
 							<p class="left">Number of Pixels:</p>
-							<p class="right"><input type="number" min="0" max="680" name="portBnumPix" class="number">680 max, 170 per universe (4 universes)</p>
+							<p class="right"><input type="number" min="0" max="680" name="portBnumPix" class="number">680 max - 170 per universe</p>
 							<p class="left">Colour Correction:</p>
 							<p class="right"><input type="color" name="portBcorrection" value="#FFFFFF">See <a href="https://github.com/FastLED/FastLED/blob/master/src/color.h" target="_blank">FastLED color.h</a></p>
 							<p class="left">White Temperature:</p>
@@ -303,7 +299,7 @@
 						</span>
 					</div>
 
-					<div id="scenes4" class="hide" name="sections">
+					<div id="scenes" class="hide" name="sections">
 						<h2>
 							Stored Scenes
 						</h2>
@@ -312,7 +308,7 @@
 						</p>
 					</div>
 
-					<div id="firmware5" class="hide" name="sections">
+					<div id="firmware" class="hide" name="sections">
 						<form action="/update" enctype="multipart/form-data" method="post" id="firmForm" name="firmForm">
 							<h2>Update Firmware</h2>
 							<p class="left">Firmware:</p>
@@ -333,7 +329,7 @@
 						</form>
 					</div>
 
-					<div id='misc6' class='hide' name='sections'>
+					<div id='misc' class='hide' name='sections'>
 						<input name='save' type='button' value='Save'>
 						<h2>LED Brightness</h2>
 						<p class="left">Status:</p>
@@ -360,7 +356,6 @@
 				</div>
 			</div>
 		</div>
-		<script src="/languages.js"></script>
-		<script src="/controller.js"></script>
+		<script src="/main.js"></script>
 	</body>
 </html>

@@ -16,12 +16,14 @@ If not, see http://www.gnu.org/licenses/
 #include <AsyncJson.h>
 #include <ArduinoJson.h> // v6
 
-const char scene_msg[] = "Not outputting<br />%u Scenes Recorded<br />%u of %u bytes used";
+const char scene_msg[] PROGMEM = "Not outputting, %u Scenes Recorded, %u of %u bytes used";
+const char msg_disabled[] = "Disabled in hotspot mode";
 const char err_generic[] = "Failed to save data. Reload page and try again.";
 const char err_2dmx_in[] = "Cannot have DMX Input on two channels";
 const char err_no_dmxin_rdm[] = "Cannot mix DMX Input and RDM";
 const char err_dmxin_artnet[] = "DMX Input only supports Artnet currently";
 const char err_outofrange[] = "Value out of range";
+const char err_wrongtype[] = "Wrong type";
 const char* err_msg;
 const char success[] = "success";
 const char message[] = "message";
@@ -34,17 +36,17 @@ AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/aja
 
   // Handle request to reboot into update mode
   if (json["doUpdate"]) {
+    uint8_t updateStage = (uint8_t)json["doUpdate"];
     json.clear();
     json[success] = 1;
     json[message] = "Entering update mode...";
     json["doUpdate"] = 1;
 
-    artRDM.end();
-    // Turn pixel strips off if they're on
-    stop_LEDs();
     deviceSettings[doFirmwareUpdate] = 1;
-    save();
-    doReboot = true;
+    if (updateStage == 1) {
+      doSave = 1;
+      doReboot = 1;
+    }
 
   // Handle reboots
   } else if (json["reboot"]) {
@@ -52,19 +54,15 @@ AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/aja
     json[success] = 1;
     json[message] = "Device restarting...";
     
-    artRDM.end();
-    // Turn pixel strips off if they're on
-    stop_LEDs();
-    
-    doReboot = true;
+    doReboot = 1;
 
   // Handle load and save of data
-  } else if (json["page"]) {
-    uint8_t page = json["page"];
+  } else if (json["section"]) {
+    uint8_t section = json["section"];
 
-    if (jsonSz <= 2 || ajaxSave(page, json)) {
+    if (jsonSz <= 2 || ajaxSave(section, json)) {
       json.clear();
-      ajaxLoad(page, json);
+      ajaxLoad(section, json);
 
       if (jsonSz > 2)
         json[message] = "Settings saved!";
@@ -73,6 +71,7 @@ AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/aja
       json.clear();
       json[success] = 0;
       json[message] = err_msg;
+      debugLog(LOG_ERROR, "ajaxSave", err_msg);
     }
   } else {
     json.clear();
@@ -103,9 +102,10 @@ int ends_with(const char *str, const char *suffix) {
          (!memcmp(str + str_len - suffix_len, suffix, suffix_len));
 }
 
-bool ajaxSave(uint8_t page, JsonObject json) {
+bool ajaxSave(uint8_t section, JsonObject json) {
   const char* key;
   bool ret = false;
+  bool reboot = false;
   err_msg = err_generic;
 
   log_meminfo("before_save");
@@ -165,7 +165,7 @@ bool ajaxSave(uint8_t page, JsonObject json) {
     }
   }
 
-  switch (page) {
+  switch (section) {
     case 1:     // Device Status
       // We don't need to save anything for this.  Go straight to load
       return true;
@@ -176,22 +176,22 @@ bool ajaxSave(uint8_t page, JsonObject json) {
       break;
 
     case 3:     // IP Address & Node Name
-      if (!isHotspot && json.containsKey(dhcpEnable) && (bool)json[dhcpEnable] != (bool)deviceSettings[dhcpEnable]) {
+      if (!isHotspot && json.containsKey(dhcpEnable) && (uint8_t)json[dhcpEnable] != (uint8_t)deviceSettings[dhcpEnable]) {
         
         if ((bool)json[dhcpEnable]) {
           enable_dhcp();
         }
-        doReboot = true;
+        reboot = true;
       }
 
       if (!isHotspot) {
-        artRDM.setShortName(deviceSettings[nodeName].as<const char*>());
-        artRDM.setLongName(deviceSettings[longName].as<const char*>());
+        artRDM.setShortName((const char*)deviceSettings[nodeName]);
+        artRDM.setLongName((const char*)deviceSettings[longName]);
       }
       ret = true;
       break;
 
-    case 4:     // Port A
+    case 'A':     // Port A
       {
         bool e131 = ((uint8_t)json[portAprot] == PROT_ARTNET_SACN) ? true : false;
         for (uint8_t x = 0; x < 4; x++) {
@@ -200,7 +200,7 @@ bool ajaxSave(uint8_t page, JsonObject json) {
         }
 
         if (deviceSettings[portAmode] != json[portAmode]) {
-          doReboot = true;
+          reboot = true;
         }
 
         // Update the Artnet class
@@ -211,14 +211,14 @@ bool ajaxSave(uint8_t page, JsonObject json) {
 
         if ((uint8_t)json[portAmode] >= LED_MODE_START && !doReboot) {
           if ((uint16_t)deviceSettings[portAnumPix] != (uint16_t)json[portAnumPix]) {
-            doReboot = true;
+            reboot = true;
           }
         }
         ret = true;
         break;
       }
 
-    case 5:     // Port B
+    case 'B':     // Port B
       #ifndef ONE_PORT
       {
         bool e131 = ((uint8_t)json[portBprot] == PROT_ARTNET_SACN) ? true : false;
@@ -228,7 +228,7 @@ bool ajaxSave(uint8_t page, JsonObject json) {
         }
 
         if (deviceSettings[portBmode] != json[portBmode]) {
-          doReboot = true;
+          reboot = true;
         }
 
         // Update the Artnet class
@@ -239,7 +239,7 @@ bool ajaxSave(uint8_t page, JsonObject json) {
 
         if ((uint8_t)json[portBmode] >= LED_MODE_START && !doReboot) {
           if ((uint16_t)deviceSettings[portBnumPix] != (uint16_t)json[portBnumPix]) {
-            doReboot = true;
+            reboot = true;
           }
         }
         ret = true;
@@ -247,22 +247,22 @@ bool ajaxSave(uint8_t page, JsonObject json) {
       }
       #endif
 
-    case 6:     // Scenes
+    case 4:     // Scenes
       // Not yet implemented
       
-      return true;
+      ret = true;
       break;
 
-    case 7:     // Firmware
+    case 5:     // Firmware
       // Doesn't come here
       return true;
       break;
 
-    case 8:     // Debug log
+    case 6:     // Miscellaneous
       if ((bool)json["debugLogClear"]) {
         return debugLogClear();
       }
-      return true;
+      ret = true;
       break;
 
     default:
@@ -274,16 +274,23 @@ bool ajaxSave(uint8_t page, JsonObject json) {
   for (JsonPair kv : json) {
     key = kv.key().c_str();
     if (deviceSettings.containsKey(key)) {
-      deviceSettings[key] = json[key];
-    }
+      if (sameType(deviceSettings[key], json[key])) {
+        deviceSettings[key] = json[key];
+      } else {
+        err_msg = err_wrongtype;
+        // Will print all errors not just first
+        debugLog(LOG_ERROR, key, err_wrongtype);
+        ret = false;
+      }
+    } // fail silently to save success, page, etc
   }
-  if (ret)
-    save();
+
+  // make sure reboot doesn't start before save
+  doSave = ret;
+  doReboot = reboot;
 
   return ret;
 }
-
-const char* msg_disabled = "Disabled in hotspot mode";
 
 // Only reply with data not available from the settings.json
 void ajaxLoad(uint8_t page, JsonObject jsonReply) {
@@ -301,22 +308,20 @@ void ajaxLoad(uint8_t page, JsonObject jsonReply) {
     case 1:     // Device Status
     {
       char buf[160];
-      String sceneStatus;
       jsonReply["isHotspot"] = isHotspot;
+      // TODO move status messages to web UI
       if (isHotspot && !deviceSettings[standAloneEnable]) {
         jsonReply["portAStatus"] = msg_disabled;
         jsonReply["portBStatus"] = msg_disabled;
       } else {
-        jsonReply["portAStatus"] = deviceSettings[portAmode];
-        jsonReply["portBStatus"] = deviceSettings[portBmode];
+        jsonReply["portAStatus"] = (const char*)deviceSettings[portAmode];
+        jsonReply["portBStatus"] = (const char*)deviceSettings[portBmode];
       }
 
       FSInfo fs_info;
       SPIFFS.info(fs_info);
       sprintf_P(buf, scene_msg, 0, fs_info.usedBytes, fs_info.totalBytes);
-      sceneStatus = buf;
-      jsonReply["sceneStatus"] = sceneStatus;
-      //jsonReply["sceneStatus"] = "Not outputting<br />0 Scenes Recorded<br />0 of 250KB used";
+      jsonReply["sceneStatus"] = buf;
       jsonReply["firmwareStatus"] = FIRMWARE_VERSION;
       break;
     }
@@ -325,4 +330,17 @@ void ajaxLoad(uint8_t page, JsonObject jsonReply) {
       jsonReply["firmwareStatus"] = FIRMWARE_VERSION;
       break;
   }
+}
+
+// type check ArduinoJson variant values
+bool sameType(JsonVariant value1, JsonVariant value2) {
+  if (  (value1.is<float>() && value2.is<float>()) ||
+        (value1.is<const char*>() && value2.is<const char*>()) ||
+        (value1.is<bool>() && value2.is<bool>()) ||
+        (value1.is<JsonArray>() && value2.is<JsonArray>()) ||
+        (value1.is<JsonObject>() && value2.is<JsonObject>()) )
+  {
+    return true;
+  }
+  return false;
 }

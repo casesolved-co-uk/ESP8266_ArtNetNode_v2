@@ -6,37 +6,6 @@
 
 #include "debugLog.h"
 
-// directory, size, date. name is done after
-const char ll_fmt[] PROGMEM = "%s %u %s ";
-
-// Debug: log directory listing
-//void log_ls(char const* path) {
-//  char buf[1024];
-//  String list = ls(path);
-//  list.toCharArray(buf, 1024);
-//  debugLog(LOG_DEBUG, "Webserver", buf);
-//}
-
-String ls(char const* path) {
-  char buf[256];
-  String ls;
-  Dir dir = SPIFFS.openDir(path);
-  while (dir.next()) {
-    if(ls.length() == 0) {
-      ls += path;
-      ls += " listing:\n";
-    } else {
-      ls += "\n";
-    }
-    // SPIFFS has no isFile() or fileTime()
-    sprintf_P(buf, ll_fmt, "-", dir.fileSize(), "01 Jan 1970");
-    ls += buf;
-    // fileName is a String, unable to pass to sprintf
-    ls += dir.fileName();
-  }
-  return ls;
-}
-
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found!");
 }
@@ -46,11 +15,13 @@ void webRespond(AsyncWebServerRequest *request, String json) {
   r->addHeader("Connection", "close");
   r->addHeader("Access-Control-Allow-Origin", "*");
   request->send(r);
+  DEBUG_LN(json.c_str());
 }
 
+const char* fwSuccess = "{\"success\":1,\"message\":\"Success: Device Restarting\"}";
 void handleFirmwareStatus(AsyncWebServerRequest *request) {
   String fail = "{\"success\":0,\"message\":\"Unknown Error\"}";
-  String ok = "{\"success\":1,\"message\":\"Success: Device restarting\"}";
+  String ok = fwSuccess;
 
   webRespond(request, (Update.hasError()) ? fail : ok);
 
@@ -61,21 +32,25 @@ void handleFirmwareUpload(AsyncWebServerRequest *request, String filename, size_
   (void) filename;
   // json response message
   String reply = "";
-  if(index == 0){
+  if (index == 0){
     uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-    if(!Update.begin(maxSketchSpace)){//start with max available size
+    DEBUG_MSG("maxSketchSpace: %u\n",  maxSketchSpace);
+    if(!Update.begin(maxSketchSpace)){ //start with max available size
       reply = "{\"success\":0,\"message\":\"Insufficient space.\"}";
     }
+    Update.runAsync(true);
+    DEBUG_MSG("handleFirmwareUpload: %s, %i, %u, %i, %u\n",  filename.c_str(), index, *data, len, final);
   }
-  if(reply.length() == 0 && Update.write(data, len) != len){
+  if (reply.length() == 0 && Update.write(data, len) != len){
     reply = "{\"success\":0,\"message\":\"Failed to save\"}";
   }
-  if(reply.length() == 0 && final){
+  if (reply.length() == 0 && final){
     if(Update.end(true)){ //true to set the size to the current progress
-      reply = "{\"success\":1,\"message\":\"Success: Device Restarting\"}";
+      reply = fwSuccess;
     } else {
       reply = "{\"success\":0,\"message\":\"Unknown Error\"}";
     }
+    DEBUG_MSG("handleFirmwareUpload: %s, %i, %u, %i, %u\n",  filename.c_str(), index, *data, len, final);
   }
 
   if (reply.length() > 0) {

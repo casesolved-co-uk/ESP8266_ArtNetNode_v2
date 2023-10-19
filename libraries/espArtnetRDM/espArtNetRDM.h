@@ -27,6 +27,13 @@ extern "C" {
 #include "artnet.h"
 #include "e131.h"
 
+#ifdef DEBUG_ESP_PORT
+  #define DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
+  #define DEBUG_LN( X ) DEBUG_ESP_PORT.println( X )
+#else
+  #define DEBUG_MSG(...)
+  #define DEBUG_LN( X )
+#endif
 
 typedef void (*artDMXCallBack)(uint8_t, uint8_t, uint16_t, bool);
 typedef void (*artSyncCallBack)(void);
