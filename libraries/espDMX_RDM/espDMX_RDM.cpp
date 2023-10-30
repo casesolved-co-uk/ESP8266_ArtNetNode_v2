@@ -101,7 +101,7 @@ void ICACHE_RAM_ATTR dmx_interrupt_handler(void) {
   }
 }
 
-static void uart_ignore_char(char c) { return; }
+static void uart_ignore_char(char c) { (void) c; return; }
 
 uint16_t dmx_get_tx_fifo_room(dmx_t* dmx) {
     if(dmx == 0 || dmx->state == DMX_NOT_INIT)
@@ -382,8 +382,8 @@ void espDMX::begin(uint8_t dir, byte* buf) {
 
     _dmx->ownBuffer = 0;
 
-    system_set_os_print(0);
-    ets_install_putc1((void *) &uart_ignore_char);
+    //system_set_os_print(0);
+    //ets_install_putc1((void *) &uart_ignore_char);
     
     // Initialize variables
     _dmx->dmx_nr = _dmx_nr;
@@ -913,14 +913,14 @@ void espDMX::rdmDisable() {
 
 uint8_t espDMX::todStatus() {
   if (_dmx == 0 || !_dmx->rdm_enable)
-    return false;
+    return 0;
   
   return _dmx->tod_status;
 }
 
 uint16_t espDMX::todCount() {
   if (_dmx == 0 || !_dmx->rdm_enable)
-    return false;
+    return 0;
   
   return _dmx->tod_size;
 }
@@ -928,28 +928,28 @@ uint16_t espDMX::todCount() {
 
 uint16_t* espDMX::todMan() {
   if (_dmx == 0 || !_dmx->rdm_enable)
-    return NULL;
+    return (uint16_t*)NULL;
 
   return _dmx->todManID;
 }
 
 uint32_t* espDMX::todDev() {
   if (_dmx == 0 || !_dmx->rdm_enable)
-    return NULL;
+    return (uint32_t*)NULL;
 
   return _dmx->todDevID;
 }
 
 uint16_t espDMX::todMan(uint16_t n) {
   if (_dmx == 0 || !_dmx->rdm_enable)
-    return NULL;
+    return 0;
 
   return _dmx->todManID[n];
 }
 
 uint32_t espDMX::todDev(uint16_t n) {
   if (_dmx == 0 || !_dmx->rdm_enable)
-    return NULL;
+    return 0;
 
   return _dmx->todDevID[n];
 }
@@ -971,7 +971,7 @@ void espDMX::todSetCallBack(todCallBackFunc callback) {
 
 bool espDMX::rdmEnabled() {
   if (_dmx == 0)
-    return 0;
+    return false;
   return _dmx->rdm_enable;
 }
 
@@ -1106,7 +1106,7 @@ void ICACHE_RAM_ATTR espDMX::inputBreak(void) {
   // Double buffer switch
   byte* tmp = _dmx->data;
   _dmx->data = _dmx->data1;
-  _dmx->data1 = _dmx->data;
+  _dmx->data1 = tmp;
 
   if (_dmx->inputCallBack)
     _dmx->inputCallBack(_dmx->numChans);

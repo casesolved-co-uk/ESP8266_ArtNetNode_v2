@@ -56,11 +56,18 @@ class pageHandler {
 		"na_LPD1886_8BIT":144
 	}
 	constructor() {
-		this.refresh();
 		this.add_modes();
+		this.settings = {};
+		// because new page must return before starting a section
+		setTimeout(() => this.init(), 100);
+	}
+	init() {
+		const handler = new sectionHandler("status1");
+		// status section save will only trigger a page refresh:
+		handler.save({target: document.getElementById("dummy")});
 	}
 	refresh() {
-		ajax("/settings.json", (err, json) => this.loadSettings(err, json));
+		ajax("/settings.json", (e, j) => this.loadSettings(e, j), {});
 	}
 	add_modes() {
 		this.mode_map = {};
@@ -91,11 +98,6 @@ class pageHandler {
 	}
 	loadSettings(err, json) {
 		if (!err) {
-			// new page
-			if (!this.settings) {
-				this.settings = json;
-				new sectionHandler("status");
-			}
 			this.updateSettings(err, json);
 			this.updatePage();
 		}
@@ -109,10 +111,16 @@ class pageHandler {
 				if (key === "success" || key == "message") {
 					// don't save
 				} else if (key === "isHotspot") {
+					this.settings["portAStatus"] = this.mode_map[this.settings["portAmode"]];
+					this.settings["portBStatus"] = this.mode_map[this.settings["portBmode"]];
 					if (json[key]) {
-						settings["wifiStatus"] = `Hotspot started, SSID: ${this.settings['hotspotSSID']}`;
+						this.settings["wifiStatus"] = `Hotspot started`;
+						if (!this.settings["standAloneEnable"]) {
+							this.settings["portAStatus"] = language["msg_disabled"];
+							this.settings["portBStatus"] = language["msg_disabled"];
+						}
 					} else {
-						settings["wifiStatus"] = `Wifi connected, SSID: ${this.settings['wifiSSID']}`;
+						this.settings["wifiStatus"] = `Wifi connected`;
 					}
 				} else {
 					// merge into settings
@@ -134,6 +142,8 @@ class pageHandler {
 						break;
 					case 'INPUT':
 						if (elem.type === 'checkbox') elem.checked = Boolean(this.settings[key]);
+						// arrays are done below
+						else if (typeof this.settings[key] === "object") Function.prototype();
 						else elem.value = this.settings[key];
 						break;
 					case 'SELECT':
@@ -207,9 +217,11 @@ class pageHandler {
 			this.current.className = "hide";
 	}
 	open(element){
-		this.closeCurrent();
-		this.current = element;
-		this.current.className = "show";
+		if (element !== this.current) {
+			this.closeCurrent();
+			this.current = element;
+			this.current.className = "show";
+		}
 	}
 }
 
@@ -229,37 +241,33 @@ class sectionHandler {
 	saveBind() {
 		for (const button of this.section.getElementsByTagName("INPUT")) {
 			if (button.type === "button" && button.name === "save")
-				button.addEventListener("click", (e) => this.save(e));
+				button.addEventListener("mouseup", (e) => this.save(e));
 		}
 	}
 	save(event) {
-		this.saveButton = event.target;
-		const json = this.getData(event.target);
-		ajax("/ajax", (e, j) => this.save_result(e, j), json);
+		// debounce
+		if (!this.saving) {
+			this.saving = true;
+			this.saveButton = event.target;
+			const json = this.getData(event.target);
+			ajax("/ajax", (e, j) => this.save_result(e, j), {postjs: json, msgElem: event.target});
+		}
 	}
 	save_result(err, json) {
 		if (!err) {
-			if (json.message) {
-				const old_text = this.saveButton.value;
-				this.saveButton.value = json.message;
-				this.saveButton.className = "showMessage";
-				setTimeout(() => {
-					this.saveButton.value = old_text;
-					this.saveButton.className = "";
-				}, 5000);
-			}
 			page.updateSettings(err, json);
-			setTimeout(page.refresh, 200);
+			setTimeout(() => page.refresh(), 200);
 		}
+		this.saving = false;
 	}
 	getData(button) {
 		const data = {
-			"section": this.section.id
+			"section": Number("0x" + this.section.id.at(-1))
 		};
 		let button_found = false;
 		for (const input of this.section.getElementsByTagName("INPUT")) {
 			if (!button_found) {
-				if (button.isSameNode(input)) button_found = true;
+				if (button === input) button_found = true;
 				continue;
 			}
 			const key = input.name;
@@ -395,7 +403,7 @@ class rebootHandler {
 	}
 	reboot() {
 		message.showOnly("msg_reboot");
-		ajax("/ajax", postjs='{"reboot":1}', reload=5000);
+		ajax("/ajax", (e,j) => {}, {postjs:'{"reboot":1}', reload:5000});
 	}
 }
 
@@ -404,16 +412,16 @@ class firmwareHandler extends sectionHandler {
 		this.buttonBind();
 	}
 	buttonBind() {
-		this.button = this.section.getElementById("fUp");
-		this.msg = this.section.getElementById("uploadMsg");
-		this.button.addEventListener("click", this.prep);
-		this.section.getElementById("update").addEventListener("change", this.fileSelect);
+		this.button = document.getElementById("fUp");
+		this.msg = document.getElementById("uploadMsg");
+		this.button.addEventListener("mouseup", (e) => this.prep(e));
+		document.getElementById("update").addEventListener("change", (e) => this.fileSelect(e));
 	}
 	fileSelect(event) {
 		const label = event.target.nextElementSibling;
 		const labelVal = label.innerHTML;
 		this.file = event.target.files[0];
-		fileName = event.target.value.split("\\\\").pop();
+		const fileName = event.target.value.split("\\\\").pop();
 		if (fileName) label.querySelector("span").innerHTML = fileName;
 		else label.innerHTML = labelVal;
 	}
@@ -421,28 +429,28 @@ class firmwareHandler extends sectionHandler {
 		if (!this.file) return;
 		this.button.disabled = true;
 		this.button.value = language["msg_upload_prep"];
-		ajax("/ajax", (e, j) => this.wait(e, j), '{"doUpdate":1}', msgElem=this.msg);
+		ajax("/ajax", (e, j) => this.wait(e, j), {postjs: '{"doUpdate":1}', msgElem: this.msg});
 	}
 	wait(err, json) {
 		if (err) {
 			this.reset();
 		} else {
-			setTimeout(function() {
-				ajax("/ajax", (e, j) => this.upload(e, j), '{"doUpdate":2}', msgElem=this.msg);
-			}, 5000);
+			setTimeout(() => {
+				ajax("/ajax", (e, j) => this.upload(e, j), {postjs: '{"doUpdate":2}', msgElem: this.msg});
+			}, 10000);
 		}
 	}
 	upload(err, json) {
 		if (err) {
 			this.reset();
 		} else {
-			ajax("/upload", (e, j) => this.reset(e, j), reload=15000, msgElem=this.msg, file=this.file, progressElem=this.button);
+			ajax("/upload", (e, j) => this.reset(e, j), {reload: 15000, msgElem: this.msg, file: this.file, progressElem: this.button});
 		}
 	}
 	reset() {
 		this.button.value = language["msg_upload_now"];
 		this.button.disabled = false;
-		setTimeout(function() {
+		setTimeout(() => {
 			this.msg.innerHTML = "";
 		}, 5000);
 	}
@@ -450,24 +458,37 @@ class firmwareHandler extends sectionHandler {
 
 class miscHandler extends sectionHandler {
 	init() {
-		ajax("/debug.log", (e,t) => this.log_result(e,t), parse=false);
+		ajax("/debug.log", (e,t) => this.log_result(e,t), {parse: false});
 	}
 	log_result(err, text) {
 		if (!err)
-			this.section.getElementById('debugLog').value = text;
+			document.getElementById('debugLog').value = text;
 	}
 }
 
 // callback has the form cb(err, json)
-function ajax(url, callback=null, postjs=null, reload=0, parse=true, msgElem=null, file=null, progressElem=null) {
+function ajax(url, callback, {postjs=null, reload=0, parse=true, msgElem=null, file=null, progressElem=null}) {
 	const request = new XMLHttpRequest();
 	let msgFunc;
 
+	// can be input type button or para
 	if (msgElem) {
 		msgFunc = (msg) => {
-			const result = message.decode(msg);
-			msgElem.innerHTML = result[1];
-		}
+			if (msg) {
+				const result = message.decode(msg);
+				let property = (input) => {msgElem.innerHTML = input;};
+				if (msgElem.nodeName === "INPUT")
+					property = (input) => {msgElem.value = input;};
+				const old_text = msgElem.value || msgElem.innerHTML;
+				const old_class = msgElem.className;
+				property(result[1]);
+				msgElem.className = "showMessage";
+				setTimeout(() => {
+					property(old_text);
+					msgElem.className = old_class;
+				}, 5000);
+			}
+		};
 	} else {
 		// already does decode
 		msgFunc = (msg) => {
@@ -475,8 +496,9 @@ function ajax(url, callback=null, postjs=null, reload=0, parse=true, msgElem=nul
 		}
 	}
 
+	let data;
 	if (file) {
-		const data = new FormData();
+		data = new FormData();
 		data.append("update", file);
 	}
 
@@ -518,16 +540,19 @@ function ajax(url, callback=null, postjs=null, reload=0, parse=true, msgElem=nul
 
 	if (progressElem) {
 		progressElem.value = language["msg_uploading"];
-		request.upload.addEventListener("progress", function(e) {
+		request.upload.addEventListener("progress", (e) => {
 			const p = Math.ceil((e.loaded / e.total) * 100);
 			if (p < 100) progressElem.value = language["msg_uploading"] + " " + p + "%";
 			else progressElem.value = language["msg_upload_complete"];
 		}, false);
 	}
 
+	if (postjs && typeof postjs === "object")
+		postjs = JSON.stringify(postjs);
+
 	if (file) {
 		request.open("POST", url);
-		request.send(postjs);
+		request.send(data);
 	} else if (postjs) {
 		request.open("POST", url);
 		request.setRequestHeader("Content-Type", "application/json");

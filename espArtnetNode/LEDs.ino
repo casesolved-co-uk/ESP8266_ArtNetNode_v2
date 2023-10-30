@@ -15,8 +15,6 @@ If not, see http://www.gnu.org/licenses/
 FastLED support
 */
 
-#include <FastLED.h>
-
 const char type_err[] PROGMEM = "Invalid LED type number: %d";
 const char buf_err[] PROGMEM = "No LED data buffer: %d";
 const char ctl_err[] PROGMEM = "No LED controller: %d";
@@ -34,21 +32,31 @@ uint32_t statusTimer = 0;
 void LEDhandler() {
   // Do Pixel FX on port A
   if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START && (uint8_t)deviceSettings[portApixMode] != FX_MODE_PIXEL_MAP) {
-    if (pixFXA.Update())
-      pixDone = 0;
+    if (pixFXA.Update()) {
+      pixADone = false;
+      yield();
+    }
   }
 
   // Do Pixel FX on port B
   #ifndef ONE_PORT
     if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START && (uint8_t)deviceSettings[portBpixMode] != FX_MODE_PIXEL_MAP) {
-      if (pixFXB.Update())
-        pixDone = 0;
+      if (pixFXB.Update()) {
+        pixBDone = false;
+        yield();
+      }
     }
   #endif
 
   // Do pixel string output
-  if (!pixDone)
-    pixDone = show_LEDs();
+  if (!pixADone) {
+    pixADone = show_LEDs(STATUS_LED_A);
+    yield();
+  }
+  if (!pixBDone) {
+    pixBDone = show_LEDs(STATUS_LED_B);
+    yield();
+  }
 }
 
 
@@ -60,9 +68,9 @@ void statusLED() {
     // Flash our main status LED
     if ((statusTimer % 2000) > 1000)
       setStatusLed(STATUS_LED_S, CRGB::Black);
-    else if (nodeError[0] != '\0')
+    else if (nodeError[0] != '\0') {
       setStatusLed(STATUS_LED_S, CRGB::Red);
-    else
+    } else
       setStatusLed(STATUS_LED_S, CRGB::Green);
 
     doStatusLedOutput();
@@ -82,7 +90,7 @@ void LEDSetup() {
   // see color.h
   led_controllers[STATUS_LED_S]->setCorrection(0xFFFFF0);
 
-  setStatusLed(STATUS_LED_S, CRGB::Pink);
+  setStatusLed(STATUS_LED_S, CRGB::Magenta);
   doStatusLedOutput();
 #endif
 
@@ -109,33 +117,35 @@ void stop_LEDs() {
 void led_controller_A() {
   digitalWrite(DMX_DIR_A, HIGH);
   // Dynamically allocate LED data array
-  CRGB* mem = (CRGB*)malloc(sizeof(CRGB) * deviceSettings[portAnumPix]);
+  CRGB* mem = (CRGB*)calloc((uint16_t)deviceSettings[portAnumPix], sizeof(CRGB));
 
   // init controller
   switch((uint8_t)deviceSettings[portAmode]) {
-    case 36: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2811, DMX_TX_A, RGB>(mem, deviceSettings[portAnumPix]); break; }
-    case 40: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2812, DMX_TX_A, RGB>(mem, deviceSettings[portAnumPix]); break; }
-    case 48: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2813, DMX_TX_A, RGB>(mem, deviceSettings[portAnumPix]); break; }
+    case 36: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2811, DMX_TX_A, GRB>(mem, (uint16_t)deviceSettings[portAnumPix]); break; }
+    case 40: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2812, DMX_TX_A, GRB>(mem, (uint16_t)deviceSettings[portAnumPix]); break; }
+    case 48: { led_controllers[STATUS_LED_A] = &FastLED.addLeds<WS2813, DMX_TX_A, GRB>(mem, (uint16_t)deviceSettings[portAnumPix]); break; }
     default: { log_u8_P(LOG_ERROR, "LEDA", type_err, (uint8_t)deviceSettings[portAmode]); return; }
   }
   led_controllers[STATUS_LED_A]->setCorrection(portAcorrect);
   led_controllers[STATUS_LED_A]->setTemperature(portAtemperature);
+  show_LEDs(STATUS_LED_A);
 }
 
 void led_controller_B() {
   digitalWrite(DMX_DIR_B, HIGH);
   // Dynamically allocate LED data array
-  CRGB* mem = (CRGB*)malloc(sizeof(CRGB) * deviceSettings[portBnumPix]);
+  CRGB* mem = (CRGB*)calloc((uint16_t)deviceSettings[portBnumPix], sizeof(CRGB));
 
   // init controller
   switch((uint8_t)deviceSettings[portBmode]) {
-    case 36: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2811, DMX_TX_B, RGB>(mem, deviceSettings[portBnumPix]); break; }
-    case 40: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2812, DMX_TX_B, RGB>(mem, deviceSettings[portBnumPix]); break; }
-    case 48: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2813, DMX_TX_B, RGB>(mem, deviceSettings[portBnumPix]); break; }
+    case 36: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2811, DMX_TX_B, GRB>(mem, (uint16_t)deviceSettings[portBnumPix]); break; }
+    case 40: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2812, DMX_TX_B, GRB>(mem, (uint16_t)deviceSettings[portBnumPix]); break; }
+    case 48: { led_controllers[STATUS_LED_B] = &FastLED.addLeds<WS2813, DMX_TX_B, GRB>(mem, (uint16_t)deviceSettings[portBnumPix]); break; }
     default: { log_u8_P(LOG_ERROR, "LEDB", type_err, (uint8_t)deviceSettings[portBmode]); return; }
   }
   led_controllers[STATUS_LED_B]->setCorrection(portBcorrect);
   led_controllers[STATUS_LED_B]->setTemperature(portBtemperature);
+  show_LEDs(STATUS_LED_B);
 }
 
 // LED strip could be more than a DMX universe long, so may need to index into the buffer for multiple writes
@@ -164,20 +174,21 @@ void set_LEDs(uint8_t controller_idx, uint16_t start_idx, uint8_t* data, uint16_
   memcpy(&leds[start_idx], data, len);
 }
 
-bool show_LEDs() {
-  return show_LEDs(STATUS_LED_A) && show_LEDs(STATUS_LED_B);
-}
-
+// output can be written to pixDone
 bool show_LEDs(uint8_t controller_idx) {
   CLEDController* controller = led_controllers[controller_idx];
 
   if (!controller) {
     log_u8_P(LOG_ERROR, "show_LEDs", ctl_err, controller_idx);
-    setStatusLed(controller_idx, CRGB::Yellow);
     return false;
   }
-
-  controller->showLeds((uint8_t)deviceSettings[maxBright]);
+#ifdef TRIGGER_LEDS
+  digitalWrite(TRIGGER, HIGH);
+#endif
+  controller->showLeds(settingsLoaded ? (uint8_t)deviceSettings[maxBright] : 255);
+#ifdef TRIGGER_LEDS
+  digitalWrite(TRIGGER, LOW);
+#endif
   return true;
 }
 
@@ -189,7 +200,13 @@ void setStatusLed(uint8_t num, CRGB::HTMLColorCode col) {
 }
 
 void doStatusLedOutput() {
+#ifdef TRIGGER_STATUS
+  digitalWrite(TRIGGER, HIGH);
+#endif
 #ifdef STATUS_LED_MODE
-  led_controllers[STATUS_LED_S]->showLeds((uint8_t)deviceSettings[statusBright]);
+  led_controllers[STATUS_LED_S]->showLeds(settingsLoaded ? (uint8_t)deviceSettings[statusBright] : 16);
+#endif
+#ifdef TRIGGER_STATUS
+  digitalWrite(TRIGGER, LOW);
 #endif
 }

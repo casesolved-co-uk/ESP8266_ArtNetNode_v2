@@ -24,13 +24,13 @@
 					</div>
 					<ul class="nav">
 						<li class="first">
-							<a href='javascript:menuClick(1)'>Device Status</a>
+							<a href="javascript: new sectionHandler('status1')">Device Status</a>
 						</li>
 						<li>
-							<a href='javascript:menuClick(2)'>WiFi</a>
+							<a href="javascript: new sectionHandler('wifi2')">WiFi</a>
 						</li>
 						<li>
-							<a href='javascript:menuClick(3)'>IP & Name</a>
+							<a href="javascript: new sectionHandler('ip3')">IP & Name</a>
 						</li>
 						<li>
 							<a href="javascript: new portHandler('portA')">Port A</a>
@@ -40,19 +40,19 @@
 							<a href="javascript: new portHandler('portB')">Port B</a>
 						</li>
 						<li name="portC" style="display: none;">
-							<a href='javascript:menuClick(5)'>Port C</a>
+							<a href="javascript: new portHandler('portB')">Port C</a>
 						</li>
 						<li>
-							<a href='javascript:menuClick(6)'>Scenes</a>
+							<a href="javascript: new sectionHandler('scenes4')">Scenes</a>
 						</li>
 						<li>
-							<a href='javascript:menuClick(7)'>Firmware</a>
+							<a href="javascript: new firmwareHandler('firmware5')">Firmware</a>
 						</li>
 						<li>
-							<a href='javascript:reboot()'>Reboot</a>
+							<a href="javascript: new rebootHandler()">Reboot</a>
 						</li>
 						<li class="last">
-							<a href='javascript:misc()'>Miscellaneous</a>
+							<a href="javascript: new miscHandler('misc6')">Miscellaneous</a>
 						</li>
 					</ul>
 					<div class="author">
@@ -61,13 +61,10 @@
 				</div>
 				<div class='main section'>
 					<!-- name not valid on div tags, but required by and works with getElementsByName in js -->
+					<div id="dummy" class="hide" name="dummy"><!-- just for initial page load --></div>
 					<div id="message" class="hide" name="error">
 						<h2>Error</h2>
 						<p class="center">There was an error communicating with the device. Refresh the page and try again.</p>
-					</div>
-					<div class="hide" name="sections">
-						<h2>Fetching Data</h2>
-						<p class="center">Fetching data from device. If this message is still here in 15 seconds, try refreshing the page or clicking the menu option again.</p>
 					</div>
 
 					<div id="status1" class="hide" name="sections">

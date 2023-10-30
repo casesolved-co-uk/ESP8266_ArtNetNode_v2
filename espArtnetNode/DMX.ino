@@ -16,6 +16,9 @@ If not, see http://www.gnu.org/licenses/
 DMX handlers
 */
 
+#include "debugLog.h"
+
+
 void DMXInHandle() {
   // Handle received DMX
   if (newDmxIn) {

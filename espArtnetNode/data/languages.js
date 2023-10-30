@@ -28,6 +28,7 @@ languages.en = {
 	// msg and title suffixes must match:
 	msg_boot: "Fetching data from device. If this message is still here in 15 seconds, try refreshing the page or clicking the menu option again.",
 	msg_reboot: "Please wait while the device reboots. This page will refresh shortly unless you changed the IP or Wifi settings.",
+	msg_disabled: "Disabled in hotspot mode",
 	msg_upload_now: "Upload Now",
 	msg_upload_prep: "Preparing Device...",
 	msg_uploading: "Uploading...",

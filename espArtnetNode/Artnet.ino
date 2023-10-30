@@ -16,12 +16,11 @@ If not, see http://www.gnu.org/licenses/
 Artnet handlers
 */
 
-#include "store.h"
-
 
 void artStart() {
   char buf[ARTNET_NODE_REPORT_LENGTH];
   uint16_t art_code;
+  bool e131;
 
   DEBUG_LN("Starting Artnet...");
   // Initialise out ArtNet
@@ -31,10 +30,11 @@ void artStart() {
   artRDM.setFirmwareVersion(ART_FIRM_VERSION);
 
   /************* PORT A *************/
+  #ifndef DEBUG_ESP_PORT
   // Add Group
   portA[0] = artRDM.addGroup((uint8_t)deviceSettings[portAnet], (uint8_t)deviceSettings[portAsub]);
   
-  bool e131 = ((uint8_t)deviceSettings[portAprot] == PROT_ARTNET_SACN) ? true : false;
+  e131 = ((uint8_t)deviceSettings[portAprot] == PROT_ARTNET_SACN) ? true : false;
 
   // LED modes advertise mode TYPE_DMX_OUT - the rest use the value assigned
   if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START)
@@ -66,7 +66,7 @@ void artStart() {
       artRDM.setE131Uni(portA[0], portA[4], deviceSettings[portAsACNuni][3]);
     }
   }
-
+  #endif
 
   /************* PORT B *************/
   #ifndef ONE_PORT
@@ -120,8 +120,6 @@ void artStart() {
 
   // Start artnet
   artRDM.begin();
-
-  delay(10);
 }
 
 void doNodeReport() {
@@ -227,7 +225,7 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
 
         // Output to pixel strip
         if (!syncEnabled)
-          pixDone = false;
+          pixADone = false;
 
         return;
 
@@ -274,7 +272,7 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
         
         // Output to pixel strip
         if (!syncEnabled)
-          pixDone = false;
+          pixBDone = false;
 
         return;
 
@@ -306,7 +304,7 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
 void syncHandle() {
   if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START) {
     rdmPause(1);
-    pixDone = show_LEDs(STATUS_LED_A);
+    pixADone = show_LEDs(STATUS_LED_A);
     rdmPause(0);
   } else if ((uint8_t)deviceSettings[portAmode] != TYPE_DMX_IN) {
     dmxA.unPause();
@@ -315,7 +313,7 @@ void syncHandle() {
   #ifndef ONE_PORT
     if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START) {
       rdmPause(1);
-      pixDone = show_LEDs(STATUS_LED_B);
+      pixBDone = show_LEDs(STATUS_LED_B);
       rdmPause(0);
     } else if ((uint8_t)deviceSettings[portBmode] != TYPE_DMX_IN) {
       dmxB.unPause();

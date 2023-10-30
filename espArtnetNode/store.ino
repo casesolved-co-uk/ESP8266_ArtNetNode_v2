@@ -4,21 +4,77 @@
  * Manage deviceSettings as json using ArduinoJson v6
  */
 
-// TODO: Switch to EEPROM_Rotate library to extend life of EEPROM
-#include <EEPROM.h>
-#include <ArduinoJson.h> // v6
 #include "store.h"
 
 const char settings_json[] = "/settings.json";
 const char defaults_json[] = "/defaults.json";
+const char files[][20] = {
+  "/defaults.json",
+  "/index.html",
+  "/style.css",
+  "/languages.js",
+  "/controller.js"
+};
 const char store[] = "store";
+
+void FS_start() {
+  CRGB::HTMLColorCode colour = CRGB::Gray;
+  bool okay;
+  // Start SPIFFS file system, will be formatted if it does not exist
+  SPIFFS.begin();
+
+  debugLogSetup();
+
+  okay = validate_FS(&colour);
+  //DEBUG_MSG("Status LED Colour: 0x%06X", colour);
+  setStatusLed(STATUS_LED_S, colour);
+  doStatusLedOutput();
+  if (!okay)
+    ESP.deepSleep(0);
+
+  //log_ls("/");
+
+  // Switch OS UART logging:
+  // DMXlib does this:
+  //system_set_os_print(0);
+  //ets_install_putc1((void *) &uart_ignore_char);
+  os_install_putc1((void*)os_log);
+}
+
+// check for essential files
+bool validate_FS(CRGB::HTMLColorCode* colour) {
+  File f;
+  const char *fn;
+  bool ret = true;
+
+  for (uint8_t i = 0; i < sizeof(files) / 20; i++) {
+    fn = files[i];
+    if (!SPIFFS.exists(fn)) {
+      *colour = CRGB::Orange;
+      debugLog_P(LOG_ERROR, fn, PSTR("Not found!"));
+      ret = false;
+      continue;
+    }
+    f = SPIFFS.open(fn, "r");
+    if (f) {
+      if (f.size() < 400) {
+        *colour = CRGB::Purple;
+        debugLog_P(LOG_ERROR, fn, PSTR("Size < 400 bytes!"));
+        ret = false;
+      }
+      f.close();
+    } else {
+      *colour = CRGB::Indigo;
+      debugLog_P(LOG_ERROR, fn, PSTR("Did not open!"));
+      ret = false;
+    }
+  }
+  return ret;
+}
 
 /*  Whenever new values are saved, update other variables
  *  IP address can be set by Artnet RDM, DHCP or user
  */
-
-// TODO: conversions causing ip, subnet and gw to be zeros, and bc to be ones
-
 void conversions(bool init) {
   if (!init && (uint8_t)deviceSettings[dhcpEnable]) {
     if (isHotspot) {
@@ -73,6 +129,9 @@ void conversions(bool init) {
   portBcorrect = strtoul(&((const char*)deviceSettings[portBcorrection])[1], NULL, 16);
   portAtemperature = strtoul(&((const char*)deviceSettings[portAtemp])[1], NULL, 16);
   portBtemperature = strtoul(&((const char*)deviceSettings[portBtemp])[1], NULL, 16);
+
+  // flag that deviceSettings is valid
+  settingsLoaded = true;
 }
 
 /*  Settings philosophy
@@ -83,12 +142,13 @@ void conversions(bool init) {
 // can't be used in callback - settingsWrite delay
 void save() {
   if (doSave) {
-    uint8_t buf[CONFIG_SIZE];
     conversions();
-    settingsWrite(buf, CONFIG_SIZE);
+    settingsWrite();
     eepromSave();
     delay(10);
     log_meminfo("after_save");
+    //deviceSettings.garbageCollect();
+    // set last so reboot cannot happen before save completes
     doSave = false;
   }
 }
@@ -164,16 +224,11 @@ void eepromLoad() {
   }
 }
 
-// use existing buffer
-void settingsWrite(uint8_t* buf, size_t buf_len) {
-  // outputs string to buf
-  size_t len = serializeJson(deviceSettings, buf, buf_len);
-  //DEBUG_MSG("Settings: %s\n", (char*)buf);
+void settingsWrite() {
   File f = SPIFFS.open(settings_json, "w");
-  f.write(buf, len);
+  serializeJson(deviceSettings, f);
   f.close();
   debugLog_P(LOG_INFO, store, PSTR("Saved settings.json"));
-  delay(10);
 }
 
 // use existing buffer
@@ -189,8 +244,8 @@ void loadDefaults(uint8_t* buf, size_t buf_len) {
     err = deserialize((char*)buf, len);
   
     if (!err) {
-      // equivalent of save() but using existing buffer
-      settingsWrite(buf, buf_len);
+      // equivalent of save()
+      settingsWrite();
       conversions(true);
       if (eepromSave())
         debugLog_P(LOG_INFO, store, PSTR("Loaded defaults"));
@@ -206,7 +261,8 @@ void loadDefaults(uint8_t* buf, size_t buf_len) {
   delay(1000);
   // Give visual indication of restart
   digitalWrite(LED_BUILTIN, HIGH);
-  DEBUG_LN("Restarting...");
+  DEBUG_LN("Sleeping...");
   delay(1000);
-  ESP.restart();
+  ESP.deepSleep(0);
+  //ESP.restart();
 }

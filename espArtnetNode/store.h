@@ -16,8 +16,13 @@ If not, see http://www.gnu.org/licenses/
 Constants
 */
 
+#include <ArduinoJson.h>
+
 #ifndef store_h
 #define store_h
+
+extern DynamicJsonDocument deviceSettings;
+extern volatile bool doSave;
 
 // Change this if the settings structure changes, should match FIRMWARE_VERSION
 #define CONFIG_VERSION "210"
@@ -54,6 +59,7 @@ enum p_merge {
   MERGE_HTP = 1
 };
 
+void FS_start();
 void conversions(bool init = false);
 
 // Settings Keywords

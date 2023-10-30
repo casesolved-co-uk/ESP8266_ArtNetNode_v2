@@ -13,11 +13,9 @@ warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Ge
 You should have received a copy of the GNU General Public License along with this program.
 If not, see http://www.gnu.org/licenses/
 */
-#include <AsyncJson.h>
-#include <ArduinoJson.h> // v6
+
 
 const char scene_msg[] PROGMEM = "Not outputting, %u Scenes Recorded, %u of %u bytes used";
-const char msg_disabled[] = "Disabled in hotspot mode";
 const char err_generic[] = "Failed to save data. Reload page and try again.";
 const char err_2dmx_in[] = "Cannot have DMX Input on two channels";
 const char err_no_dmxin_rdm[] = "Cannot mix DMX Input and RDM";
@@ -27,12 +25,19 @@ const char err_wrongtype[] = "Wrong type";
 const char* err_msg;
 const char success[] = "success";
 const char message[] = "message";
+const char busy[] = "{\"success\":0,\"message\":\"Device busy\"}";
+
+volatile uint8_t inAJAX = 0;
 
 AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/ajax", [](AsyncWebServerRequest *request, JsonVariant jsin) {
   // Gets reused as reply
   JsonObject json = jsin.as<JsonObject>();
   String reply;
-  size_t jsonSz = json.size();
+
+  if (inAJAX++) {
+    request->send(503, JSON_MIMETYPE, busy);
+    return;
+  }
 
   // Handle request to reboot into update mode
   if (json["doUpdate"]) {
@@ -57,16 +62,13 @@ AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/aja
     doReboot = 1;
 
   // Handle load and save of data
-  } else if (json["section"]) {
+  } else if (json.containsKey("section")) {
     uint8_t section = json["section"];
-
-    if (jsonSz <= 2 || ajaxSave(section, json)) {
+    if (ajaxSave(section, json)) {
       json.clear();
       ajaxLoad(section, json);
-
-      if (jsonSz > 2)
+      if (!json.containsKey(message))
         json[message] = "Settings saved!";
-
     } else {
       json.clear();
       json[success] = 0;
@@ -84,6 +86,7 @@ AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/aja
 
   serializeJson(json, reply);
   request->send(200, JSON_MIMETYPE, reply);
+  inAJAX = 0;
 });
 
 int starts_with(const char *str, const char *prefix) {
@@ -116,8 +119,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
     if (deviceSettings.containsKey(key)) {
 
       // Should do a lot of input checking here!
-
-      if (strcmp(key, portAmode) == 0 && (uint8_t)json[key] == TYPE_DMX_IN) {
+      if (strcmp(key, portAmode) == 0 && (uint8_t)kv.value() == TYPE_DMX_IN) {
         if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_IN) {
           err_msg = err_2dmx_in;
           return false;
@@ -128,7 +130,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
           err_msg = err_dmxin_artnet;
           return false;
         }
-      } else if (strcmp(key, portBmode) == 0 && (uint8_t)json[key] == TYPE_DMX_IN) {
+      } else if (strcmp(key, portBmode) == 0 && (uint8_t)kv.value() == TYPE_DMX_IN) {
         if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
           err_msg = err_2dmx_in;
           return false;
@@ -140,23 +142,23 @@ bool ajaxSave(uint8_t section, JsonObject json) {
           return false;
         }
       } else if(starts_with(key, "port")) {
-        if(ends_with(key, "net") && (uint8_t)json[key] >= 128) {
+        if(ends_with(key, "net") && (uint8_t)kv.value() >= 128) {
           err_msg = err_outofrange;
           return false;
-        } else if(ends_with(key, "sub") && (uint8_t)json[key] >= 16) {
+        } else if(ends_with(key, "sub") && (uint8_t)kv.value() >= 16) {
           err_msg = err_outofrange;
           return false;
         } else if(ends_with(key, "uni")) {
           for (uint8_t x = 0; x < 4; x++) {
-            if(ends_with(key, "sACNuni") && (json[key][x] <= 0 || json[key][x] >= 64000) ) {
+            if(ends_with(key, "sACNuni") && (kv.value()[x] <= 0 || kv.value()[x] >= 64000) ) {
               err_msg = err_outofrange;
               return false;
-            } else if(ends_with(key, "uni") && json[key][x] >= 16 ) {
+            } else if(ends_with(key, "uni") && kv.value()[x] >= 16 ) {
               err_msg = err_outofrange;
               return false;
             }
           }
-        } else if(ends_with(key, "numPix") && (uint16_t)json[key] > 680) {
+        } else if(ends_with(key, "numPix") && (uint16_t)kv.value() > 680) {
           err_msg = err_outofrange;
           return false;
         }
@@ -191,7 +193,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
       ret = true;
       break;
 
-    case 'A':     // Port A
+    case 0xA:     // Port A
       {
         bool e131 = ((uint8_t)json[portAprot] == PROT_ARTNET_SACN) ? true : false;
         for (uint8_t x = 0; x < 4; x++) {
@@ -209,7 +211,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
         artRDM.setUni(portA[0], portA[1], json[portAuni][0]);
         artRDM.setMerge(portA[0], portA[1], json[portAmerge]);
 
-        if ((uint8_t)json[portAmode] >= LED_MODE_START && !doReboot) {
+        if ((uint8_t)json[portAmode] >= LED_MODE_START && !reboot) {
           if ((uint16_t)deviceSettings[portAnumPix] != (uint16_t)json[portAnumPix]) {
             reboot = true;
           }
@@ -218,7 +220,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
         break;
       }
 
-    case 'B':     // Port B
+    case 0xB:     // Port B
       #ifndef ONE_PORT
       {
         bool e131 = ((uint8_t)json[portBprot] == PROT_ARTNET_SACN) ? true : false;
@@ -237,7 +239,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
         artRDM.setUni(portB[0], portB[1], json[portBuni][0]);
         artRDM.setMerge(portB[0], portB[1], (uint8_t)json[portBmerge]);
 
-        if ((uint8_t)json[portBmode] >= LED_MODE_START && !doReboot) {
+        if ((uint8_t)json[portBmode] >= LED_MODE_START && !reboot) {
           if ((uint16_t)deviceSettings[portBnumPix] != (uint16_t)json[portBnumPix]) {
             reboot = true;
           }
@@ -274,8 +276,8 @@ bool ajaxSave(uint8_t section, JsonObject json) {
   for (JsonPair kv : json) {
     key = kv.key().c_str();
     if (deviceSettings.containsKey(key)) {
-      if (sameType(deviceSettings[key], json[key])) {
-        deviceSettings[key] = json[key];
+      if (sameType(deviceSettings[key], kv.value())) {
+        deviceSettings[key].set(kv.value());
       } else {
         err_msg = err_wrongtype;
         // Will print all errors not just first
@@ -293,7 +295,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
 }
 
 // Only reply with data not available from the settings.json
-void ajaxLoad(uint8_t page, JsonObject jsonReply) {
+void ajaxLoad(uint8_t section, JsonObject jsonReply) {
   // Get MAC Address
   char MAC_char[30] = "";
   for (int i = 0; i < 6; ++i) {
@@ -304,29 +306,22 @@ void ajaxLoad(uint8_t page, JsonObject jsonReply) {
   jsonReply["macAddress"] = MAC_char;
   jsonReply[success] = 1;
 
-  switch (page) {
+  switch (section) {
     case 1:     // Device Status
     {
       char buf[160];
       jsonReply["isHotspot"] = isHotspot;
-      // TODO move status messages to web UI
-      if (isHotspot && !deviceSettings[standAloneEnable]) {
-        jsonReply["portAStatus"] = msg_disabled;
-        jsonReply["portBStatus"] = msg_disabled;
-      } else {
-        jsonReply["portAStatus"] = (const char*)deviceSettings[portAmode];
-        jsonReply["portBStatus"] = (const char*)deviceSettings[portBmode];
-      }
 
       FSInfo fs_info;
       SPIFFS.info(fs_info);
       sprintf_P(buf, scene_msg, 0, fs_info.usedBytes, fs_info.totalBytes);
       jsonReply["sceneStatus"] = buf;
       jsonReply["firmwareStatus"] = FIRMWARE_VERSION;
+      jsonReply[message] = "Settings Loaded!";
       break;
     }
 
-    case 7:     // Firmware
+    case 5:     // Firmware
       jsonReply["firmwareStatus"] = FIRMWARE_VERSION;
       break;
   }

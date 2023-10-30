@@ -18,6 +18,7 @@ SPIFFS_read rc=-10011  <-- means duplicate file found with same name
 */
 
 #include <FS.h> // SPIFFS
+#include <string.h>
 #include "debugLog.h"
 
 #define BUFSIZE 512
@@ -26,7 +27,7 @@ const char logfile[] = "/debug.log";
 const char format[] = "%s-%s: ";
 const char setup_fmt[] PROGMEM = "Logfile Size: %u, SPIFFS Total: %u, Used %u, Remaining: %u (bytes). VCC: %u mV";
 const char too_long[] PROGMEM = "String too long";
-const char meminfo_fmt[] PROGMEM = "Heap Size: %u, Stack Size: %u, Free Heap: %u, Free Stack: %u (bytes)";
+const char meminfo_fmt[] PROGMEM = "Heap Size: %u, Stack Size: %u, Free Heap: %u, Free Stack: %u, json: %u (bytes)";
 // directory, size, date. name is done after
 const char ll_fmt[] PROGMEM = "%s %u %s ";
 char* stack_start;
@@ -43,17 +44,17 @@ char os_logbuffer[128] = "";
 uint32_t os_log_write_timer = 0;
 void os_log(const char c) {
   uint8_t len = strlen(os_logbuffer);
-  // overflow
-  if (len == 127) {
-    len = 0;
-    DEBUG_LN("ERROR: os_log overflow");
-  }
-  os_logbuffer[len++] = c;
-  os_logbuffer[len] = '\0';
+  // overflow - write out immediately, exception?
   if (len > 120) {
     // force output
     os_log_write_timer = 0;
   }
+  if (len == 127) {
+    os_log_write();
+    len = 0;
+  }
+  os_logbuffer[len++] = c;
+  os_logbuffer[len] = '\0';
 }
 
 // call in main loop
@@ -62,13 +63,14 @@ void os_log_write() {
     File f = SPIFFS.open(logfile, "a");
     if (f) {
       f.print(os_logbuffer);
+      f.flush();
       f.close();
       os_logbuffer[0] = '\0';
     } else {
       DEBUG_LN("ERROR: os_log_write");
     }
+    os_log_write_timer = millis() + 100;
   }
-  os_log_write_timer = millis() + 10;
 }
 
 String ls(char const* path) {
@@ -125,9 +127,9 @@ void log_meminfo(const char* context) {
   uint32_t stack = stackSize();
   uint32_t freestk = STACK_SIZE - stack;
   uint32_t heap = DRAM_SIZE - freehp - STACK_SIZE;
-  char buf[80];
+  char buf[160];
 
-  sprintf_P(buf, meminfo_fmt, heap, stack, freehp, freestk);
+  sprintf_P(buf, meminfo_fmt, heap, stack, freehp, freestk, deviceSettings.memoryUsage());
   debugLog(LOG_INFO, context, buf);
 }
 
@@ -150,7 +152,6 @@ void debugLogSetup() {
   );
   debugLog(LOG_INFO, startup, buf);
   log_meminfo(startup);
-  delay(10);
 }
 
 void debugLogWrite(const char* buf) {
@@ -199,7 +200,9 @@ int debugLog_P(const loglevel_t level, const char* context, const char* text) {
 
 // page 8 of ajax; truncate
 bool debugLogClear() {
+  String list = ls("/");
   File f = SPIFFS.open(logfile, "w");
+  f.println(list);
   f.close();
   return true; // for ajax return value
 }

@@ -15,14 +15,16 @@ If not, see http://www.gnu.org/licenses/
 For storing a debug log in the SPIFFS
 */
 
+#include <stdint.h>
+#include <ArduinoJson.h>
+
 #ifndef debugLog_h
 #define debugLog_h
 
+extern DynamicJsonDocument deviceSettings;
 extern char* stack_start;
 
 // debug helper
-const char got_here_u8[] PROGMEM = "Got here %d";
-const char got_here_u32[] PROGMEM = "Got here %08" PRIx32;
 const char startup[] = "Startup";
 
 #ifdef DEBUG_ESP_PORT

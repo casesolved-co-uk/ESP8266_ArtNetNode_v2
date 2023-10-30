@@ -28,9 +28,24 @@
         Creating new web UI theme (https://github.com/mtongnz/ESP8266_ArtNetNode_v2/issues/22)
 */
 
-/* racitup additions:
+/* INFO
+ *  A full DMX frame takes ~23msec to transmit, max refresh = 44Hz. Use partial frames for faster refresh
+ *  250kbits/s, 2 stop bits, no parity
+ *  Port A uses UART0: IO1 & IO3 OR IO15 & IO13 (Serial.swap() or system_uart_swap/system_uart_de_swap - bootloader not affected) OR IO2 & IO3
+ *  Port B uses UART1: IO2 & IO8 but IO8 (RX2) is normally used for flash
+ *  Wemos has 470R resistor on TX output preventing in-circuit programming and logging - bridge
+ *  ESP8266 boot print baud rate: 26MHz clock = 74880, 40MHz clock = 115200
+ *  Wemos and ESP-12 series have 26MHz clock
+ *  
+ *  Busy times:
+ *  DMX output - start frame takes 2.5ms, thereafter works on UART interrupts
+ *  STATUS LED - 200usec
+ *  WS2812 144 LED strip - 4.6ms
+ */
+
+/* casesolved additions:
   ESP8266 BSP URL: https://arduino.esp8266.com/stable/package_esp8266com_index.json
-  Due to code problems, ESP8266 BSP Version 2.5.0 is required which installs an older espressif8266 platform version. BSP v2.5.2 is latest supported on MACOS 10.11
+  BSP v2.5.2 is latest supported on MACOS 10.11, the testing platform
   Copy github repo libs to your sketchbook library and restart
   Copy ESP8266 SPIFFS filesystem uploader to sketchbook tools folder & upload the SPIFFS webserver files (1M size plenty for development)
   Copy source to a sketch folder named espArtnetNode
@@ -42,39 +57,48 @@
     Website: Dynamically remove Port B, add status and max LED brightnesses
     FASTLED library for all LED driving including options for supported non-clocked LED types
     [TODO] Reimplement FX library for FastLED
-    Support BSP v2.5.2
+    Support ESP8266 BSP v2.5.2
     Update to ArduinoJson v6
     [TODO] Update store to EEPROM_Rotate
     Use json file as settings store instead of struct for sharing with website
     [TODO] Import other peoples' fixes
     Fix compile warnings
-    Redirect debug/exception logging to debug log - doesn't seem to work?
+    Redirect debug/exception logging to debug log & remove disable from DMX lib
+    [TODO] Add port disable option
 
     # Next version:
     [TODO] Static scene saving
     [TODO] Chase scene recording and playback, hopefully with a fast RLE for compression
-    [TODO] Restyle with bootstrap
-    [TODO] Support clocked LED strip types over single SPI bus
+    [TODO] Restyle website with bootstrap
+    [TODO] HW: Support clocked LED strip types over single SPI bus - PortC
+    [TODO] HW: Move port A to IO15 & IO13 to avoid bootloader output
+    ADC pin fix
+
+    # Major hardware upgrade
+    [TODO] HW Upgrade hardware to Wemos S2 mini / ESP32 S2
 
   Artnet 2CH DMX board supported ESP8266 boards: Wemos D1 mini (User supplied) or Generic ESP8266 module (ESP-12S pre-populated)
 */
+
 // required by ESPAsyncWebServer for ArduinoJson v6 compatibility
 // from arduinojson.org/v6/assistant
-#define DYNAMIC_JSON_DOCUMENT_SIZE 3072
-//#define ARDUINOJSON_ENABLE_STD_STRING 1
-//#define ARDUINOJSON_ENABLE_ARDUINO_STRING 0
+//#define DYNAMIC_JSON_DOCUMENT_SIZE 3072
+#define ARDUINOJSON_ENABLE_STD_STRING 0
+#define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
+#define ARDUINOJSON_USE_LONG_LONG 0
+#include <ArduinoJson.h> // v6
 
 #include <ESP8266WiFi.h>
-#include <WiFiClient.h>
+//#include <WiFiClient.h>
 #include <ESPAsyncTCP.h>
-#include <ESPAsyncWebSrv.h>
 #include <AsyncJson.h>
-#include <ArduinoJson.h> // v6
-#include <FS.h>
+#include <ESPAsyncWebSrv.h>
+// TODO: Switch to EEPROM_Rotate library to extend life of EEPROM
+#include <EEPROM.h>
 #include <FastLED.h>
-#include "store.h"
 #include "espDMX_RDM.h"
 #include "espArtNetRDM.h"
+#include "store.h"
 #include "ws2812Driver.h"
 #include "wsFX.h"
 #include "debugLog.h"
@@ -117,7 +141,12 @@ const char* FIRMWARE_VERSION = "v2.1.0";
 #define DMX_TX_A 1
 #define DMX_TX_B 2
 
-//#define ONE_PORT  // Testing
+#define ONE_PORT  // Testing
+// Testing oscilloscope trigger pin
+#define TRIGGER 13 // must use this with any of below
+//#define TRIGGER_DMX
+#define TRIGGER_LEDS
+//#define TRIGGER_STATUS
 
 #define STATUS_LED_PIN 12
 #define STATUS_LED_MODE WS2812B
@@ -146,6 +175,7 @@ IPAddress gateway;
 IPAddress broadcast;
 IPAddress dmxBroadcast;
 
+// NOTE: cannot use only 1, DMX RDM lib uses both. Just don't call begin
 espDMX dmxA(0);
 espDMX dmxB(1);
 
@@ -153,8 +183,8 @@ uint8_t dmxInSeqID = 0;
 
 esp8266ArtNetRDM artRDM;
 AsyncWebServer webServer(80);
-// see store.h
-DynamicJsonDocument deviceSettings(DYNAMIC_JSON_DOCUMENT_SIZE);
+// from monitoring memoryUsage()
+DynamicJsonDocument deviceSettings(2560);
 File fsUploadFile;
 
 uint32_t portAcorrect, portBcorrect, portAtemperature, portBtemperature;
@@ -166,12 +196,14 @@ ws2812Driver pixDriver;
 pixPatterns pixFXA(0, &pixDriver);
 pixPatterns pixFXB(1, &pixDriver);
 
-volatile bool pixDone = 1;  // signals output of LEDs
-volatile bool isHotspot = 0;
-volatile bool newDmxIn = 0;
+volatile bool pixADone = true;
+volatile bool pixBDone = true;
+volatile bool isHotspot = false;
+volatile bool newDmxIn = false;
 volatile bool doReboot = false;
-volatile bool doSave = 0;
-volatile bool nodeErrorShowing = 1;
+volatile bool doSave = false;
+volatile bool nodeErrorShowing = true;
+volatile bool settingsLoaded = false;
 
 uint32_t nextNodeReport = 0;
 char nodeError[ARTNET_NODE_REPORT_LENGTH] = "";
@@ -184,13 +216,19 @@ void setup(void) {
   stack_start = &stack;
   bool resetDefaults = false;
 
-  // debugging: configure serial and switch builtin LED ON
-  Serial.begin(74880);
-  delay(3000); // allow USB serial to catch up and slow boot loops
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
+#ifdef DEBUG_ESP_PORT
+  // debugging: configure serial
+  DEBUG_ESP_PORT.begin(74880);
+#endif
 
-  // Make direction output to avoid boot garbage being sent out
+  // testing
+#ifdef TRIGGER
+  pinMode(TRIGGER, OUTPUT);
+  digitalWrite(TRIGGER, LOW);
+#endif
+
+  // DIR HIGH = Opto LED off = logic HIGH on MAX485 Data Enable = TX mode
+  // Make direction input to avoid boot garbage being sent out and avoid DMX shorts
   pinMode(DMX_DIR_A, OUTPUT);
   digitalWrite(DMX_DIR_A, LOW);
 #ifndef ONE_PORT
@@ -210,12 +248,12 @@ void setup(void) {
   }
 #endif
 
-  // Start SPIFFS file system, will be formatted if it does not exist
-  // Should be initialised using ESP8266 Sketch Data Upload tool
-  SPIFFS.begin();
-  debugLogSetup();
-  //log_ls("/");
-  DEBUG_MSG("millis size: %u", sizeof(
+  // Init status LED
+  LEDSetup();
+
+  // FS Should be initialised using ESP8266 Sketch Data Upload tool
+  // Also inits the debug log and os logging to file
+  FS_start();
   // ########## Most initialisation after debug log setup && SPIFFS ##########
 
   // Load our saved values or store defaults
@@ -236,27 +274,21 @@ void setup(void) {
   // Webserver (ajax) and wifi (settings) both require config loaded
   // Start web server before wifi since if no client connection and wifi network configured, will restart
   webSetup();
-  webServer.begin();
+  yield();
 
   // Start wifi, sets Hotspot mode
   wifiStart();
-
-  // Init status LED after core system components
-  LEDSetup();
+  yield();
 
   // Don't start our Artnet or DMX in firmware update mode
   if (!(uint8_t)deviceSettings[doFirmwareUpdate]) {
-
     // Setup Artnet Ports & Callbacks
     artStart();
-
-    // Switch OS UART logging:
-    os_install_putc1((void*)os_log);
-    // Don't open any ports for a bit to let the ESP spill it's garbage to serial
-    delay(500);
+    yield();
 
     // DMX port setup - uses Serial debug port
     portSetup();
+    yield();
   }
 
   deviceSettings[doFirmwareUpdate] = 0;
@@ -264,9 +296,16 @@ void setup(void) {
   // save after either connecting to an AP or staying in hotspot mode
   doSave = true;
 
+  // Don't open any ports for a bit to let the ESP spill it's garbage to serial
+  //while (millis() < 3000)
+  //  delay(100);
+
 #ifdef DEBUG_ESP_PORT
   //WiFi.printDiag(DEBUG_ESP_PORT);
   DEBUG_ESP_PORT.setDebugOutput(true);
+  // builtin LED on GPIO2 also UART1 TX
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
 #endif
 }
 
@@ -281,10 +320,16 @@ void loop(void) {
   artRDM.handler();
 
   // DMX handlers
+#ifdef TRIGGER_DMX
+  digitalWrite(TRIGGER, HIGH);
+#endif
   dmxA.handler();
   #ifndef ONE_PORT
     dmxB.handler();
   #endif
+#ifdef TRIGGER_DMX
+  digitalWrite(TRIGGER, LOW);
+#endif
   DMXInHandle();
 
   LEDhandler();
@@ -306,9 +351,7 @@ void handleReboot() {
     stop_LEDs();
 
     // Ensure all web data is sent before we reboot
-    uint32_t n = millis() + 1000;
-    while (millis() < n)
-      delay(10);
+    delay(500);
 
     ESP.restart();
   }

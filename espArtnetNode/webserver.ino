@@ -4,8 +4,6 @@
  * Port to AsyncWebServer
  */
 
-#include "debugLog.h"
-
 void notFound(AsyncWebServerRequest *request) {
   request->send(404, "text/plain", "Not found!");
 }
@@ -98,4 +96,5 @@ void webSetup() {
   webServer.on("/style_delete", HTTP_GET, handleStyleDelete);
 
   webServer.onNotFound(notFound);
+  webServer.begin();
 }

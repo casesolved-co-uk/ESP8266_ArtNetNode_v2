@@ -13,8 +13,6 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see http://www.gnu.org/licenses/
 */
 
-#include <ESP8266WiFi.h>
-#include "store.h"
 
 const char reset_normal[] PROGMEM = "OK: Device started";
 const char reset_error_short[] PROGMEM = "Restart error: %s";

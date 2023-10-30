@@ -391,7 +391,7 @@ void esp8266ArtNetRDM::_artPoll() {
     return;
   _art->nextPollReply = millis() + 2000;
   
-  unsigned char _artReplyBuffer[ARTNET_REPLY_SIZE];
+  uint8_t _artReplyBuffer[ARTNET_REPLY_SIZE];
   _artReplyBuffer[0] = 'A';
   _artReplyBuffer[1] = 'r';
   _artReplyBuffer[2] = 't';
@@ -400,8 +400,8 @@ void esp8266ArtNetRDM::_artPoll() {
   _artReplyBuffer[5] = 'e';
   _artReplyBuffer[6] = 't';
   _artReplyBuffer[7] = 0;
-  _artReplyBuffer[8] = ARTNET_ARTPOLL_REPLY;      	// op code lo-hi
-  _artReplyBuffer[9] = ARTNET_ARTPOLL_REPLY >> 8; 	// 0x2100 = artPollReply
+  _artReplyBuffer[8] = (uint8_t)(ARTNET_ARTPOLL_REPLY & 0xFF);      // op code lo-hi
+  _artReplyBuffer[9] = (uint8_t)((ARTNET_ARTPOLL_REPLY >> 8) & 0xFF); // 0x2100 = artPollReply
   _artReplyBuffer[10] = _art->deviceIP[0];        	// ip address
   _artReplyBuffer[11] = _art->deviceIP[1];
   _artReplyBuffer[12] = _art->deviceIP[2];
@@ -770,7 +770,7 @@ void esp8266ArtNetRDM::_artIPProg(unsigned char *_artBuffer) {
 
 void esp8266ArtNetRDM::_artIPProgReply() {
   // Initialise our reply
-  char ipProgReply[ARTNET_IP_PROG_REPLY_SIZE];
+  uint8_t ipProgReply[ARTNET_IP_PROG_REPLY_SIZE];
   
   ipProgReply[0] = 'A';
   ipProgReply[1] = 'r';
@@ -780,8 +780,8 @@ void esp8266ArtNetRDM::_artIPProgReply() {
   ipProgReply[5] = 'e';
   ipProgReply[6] = 't';
   ipProgReply[7] = 0;
-  ipProgReply[8] = ARTNET_IP_PROG_REPLY;      // op code lo-hi
-  ipProgReply[9] = ARTNET_IP_PROG_REPLY >> 8; // 0x2100 = artPollReply
+  ipProgReply[8] = (uint8_t)(ARTNET_IP_PROG_REPLY & 0xFF);      // op code lo-hi
+  ipProgReply[9] = (uint8_t)((ARTNET_IP_PROG_REPLY >> 8) & 0xFF); // 0x2100 = artPollReply
   ipProgReply[10] = 0;
   ipProgReply[11] = 14;                 // artNet version (14)
   ipProgReply[12] = 0;
@@ -967,6 +967,7 @@ void esp8266ArtNetRDM::_artSync(unsigned char *_artBuffer) {
 }
 
 void esp8266ArtNetRDM::_artFirmwareMaster(unsigned char *_artBuffer) {
+  (void) _artBuffer;
   //Serial.println("artFirmwareMaster");
 }
 
@@ -1029,7 +1030,7 @@ void esp8266ArtNetRDM::artTODData(uint8_t g, uint8_t p, uint16_t* uidMan, uint32
 
   // Initialise our reply
   uint16_t len = ARTNET_TOD_DATA_SIZE + (6 * uidTotal);
-  char artTodData[len];
+  uint8_t artTodData[len];
   artTodData[0] = 'A';
   artTodData[1] = 'r';
   artTodData[2] = 't';
@@ -1038,8 +1039,8 @@ void esp8266ArtNetRDM::artTODData(uint8_t g, uint8_t p, uint16_t* uidMan, uint32
   artTodData[5] = 'e';
   artTodData[6] = 't';
   artTodData[7] = 0;
-  artTodData[8] = ARTNET_TOD_DATA;      // op code lo-hi
-  artTodData[9] = ARTNET_TOD_DATA >> 8;
+  artTodData[8] = (uint8_t)(ARTNET_TOD_DATA & 0xFF);      // op code lo-hi
+  artTodData[9] = (uint8_t)((ARTNET_TOD_DATA >> 8) & 0xFF);
   artTodData[10] = 0;
   artTodData[11] = 14;                 // artNet version (14)
   artTodData[12] = 0x01;               // rdm standard Ver 1.0
@@ -1171,8 +1172,8 @@ void esp8266ArtNetRDM::rdmResponse(rdm_data* c, uint8_t g, uint8_t p) {
   rdmReply[5] = 'e';
   rdmReply[6] = 't';
   rdmReply[7] = 0;
-  rdmReply[8] = ARTNET_RDM;          // op code lo-hi
-  rdmReply[9] = ARTNET_RDM >> 8;
+  rdmReply[8] = (uint8_t)(ARTNET_RDM & 0xFF);          // op code lo-hi
+  rdmReply[9] = (uint8_t)((ARTNET_RDM >> 8) & 0xFF);
   rdmReply[10] = 0;
   rdmReply[11] = 14;                 // artNet version (14)
   rdmReply[12] = 0x01;               // RDM version - RDM STANDARD V1.0
@@ -1191,7 +1192,7 @@ void esp8266ArtNetRDM::rdmResponse(rdm_data* c, uint8_t g, uint8_t p) {
     if (_art->group[g]->ports[p]->rdmSenderIP[x] != INADDR_NONE) {
       // Send packet
       eUDP.beginPacket(_art->group[g]->ports[p]->rdmSenderIP[x], ARTNET_PORT);
-      int test = eUDP.write(rdmReply,len);
+      //int test = eUDP.write(rdmReply,len);
       eUDP.endPacket();
     }
   }
@@ -1345,7 +1346,7 @@ void esp8266ArtNetRDM::sendDMX(uint8_t g, uint8_t p, IPAddress bcAddress, uint8_
 
   _art->group[g]->ports[p]->dmxChans = length;
 
-  unsigned char _artDMX[ARTNET_BUFFER_MAX];
+  uint8_t _artDMX[ARTNET_BUFFER_MAX];
   _artDMX[0] = 'A';
   _artDMX[1] = 'r';
   _artDMX[2] = 't';
@@ -1354,8 +1355,8 @@ void esp8266ArtNetRDM::sendDMX(uint8_t g, uint8_t p, IPAddress bcAddress, uint8_
   _artDMX[5] = 'e';
   _artDMX[6] = 't';
   _artDMX[7] = 0;
-  _artDMX[8] = ARTNET_ARTDMX;      	// op code lo-hi
-  _artDMX[9] = ARTNET_ARTDMX >> 8;	
+  _artDMX[8] = (uint8_t)(ARTNET_ARTDMX & 0xFF);      	// op code lo-hi
+  _artDMX[9] = (uint8_t)((ARTNET_ARTDMX >> 8) & 0xFF);	
   _artDMX[10] = 0;  		   	// protocol version (14)
   _artDMX[11] = 14;
   _artDMX[12] = _dmxSeqID++;		// sequence ID
@@ -1422,11 +1423,11 @@ void esp8266ArtNetRDM::_e131Receive(e131_packet_t* e131Buffer) {
     //return ERROR_ACN_ID;
     return;
 
-  if (__builtin_bswap32(e131Buffer->root_vector) != VECTOR_ROOT)
+  if (htonl(e131Buffer->root_vector) != VECTOR_ROOT)
     //return ERROR_VECTOR_ROOT;
     return;
 
-  if (__builtin_bswap32(e131Buffer->frame_vector) != VECTOR_FRAME)
+  if (htonl(e131Buffer->frame_vector) != VECTOR_FRAME)
     //return ERROR_VECTOR_FRAME;
     return;
 
@@ -1438,9 +1439,10 @@ void esp8266ArtNetRDM::_e131Receive(e131_packet_t* e131Buffer) {
   // No errors -> continue with sACN processing
 
 
-  uint16_t uni = (e131Buffer->universe << 8) | ((e131Buffer->universe >> 8) & 0xFF);
-  uint16_t numberOfChannels = (e131Buffer->property_value_count << 8) | ((e131Buffer->property_value_count >> 8) & 0xFF) - 1;
-  uint16_t startChannel = (e131Buffer-> first_address << 8) | ((e131Buffer-> first_address >> 8) & 0xFF);
+  uint16_t uni = htons(e131Buffer->universe);
+  uint16_t numberOfChannels = htons(e131Buffer->property_value_count) - 1;
+  //uint16_t numberOfChannels = (e131Buffer->property_value_count << 8) | ((e131Buffer->property_value_count >> 8) & 0xFF) - 1;
+  uint16_t startChannel = htons(e131Buffer->first_address);
   uint16_t seq = e131Buffer->sequence_number;
 
   uint8_t _e131Count = 0;
