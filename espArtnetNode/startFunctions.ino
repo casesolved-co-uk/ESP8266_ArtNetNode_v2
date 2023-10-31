@@ -61,18 +61,30 @@ bool resetDecode(char* str_out, uint16_t* code_out) {
 }
 
 
-// Wifi event handler wifi_handle_event_cb - deprecated. Use ESP8266WiFiGeneric.h individual handlers (e.g. onSoftAPModeStationConnected)
-// for debugging see Debug level WiFi and DEBUG_ESP_PORT.setDebugOutput(true);
-void wifiStart() {
-  wifi_set_sleep_type(NONE_SLEEP_T);
-
+// configures basic defaults for if board FS is not initialised
+void wifiBasicInit() {
+  if (!settingsLoaded) {
+    deviceSettings[hotspotSSID] = "";
+    deviceSettings[hotspotPass] = "6hMbaXIqzneK";
+    deviceSettings[standAloneEnable] = 1;
+    ip = IPAddress(2,0,0,1);
+    subnet = IPAddress(255,0,0,0);
+  }
   // If it's the default WiFi SSID, make it unique
   if (strcmp((const char*)deviceSettings[hotspotSSID], "espArtNetNode") == 0 || (const char*)deviceSettings[hotspotSSID][0] == '\0') {
     char buf[20];
     sprintf(buf, "espArtNetNode_%05u", (ESP.getChipId() & 0xFFFF)); // 32-bit -> 5 digits or 99999 or <17-bits
     deviceSettings[hotspotSSID] = buf;
   }
-  
+}
+
+// Wifi event handler wifi_handle_event_cb - deprecated. Use ESP8266WiFiGeneric.h individual handlers (e.g. onSoftAPModeStationConnected)
+// for debugging see Debug level WiFi and DEBUG_ESP_PORT.setDebugOutput(true);
+void wifiStart() {
+  wifi_set_sleep_type(NONE_SLEEP_T);
+
+  wifiBasicInit();
+
   if ((uint8_t)deviceSettings[standAloneEnable]) {
     startHotspot();
     return;

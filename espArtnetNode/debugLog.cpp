@@ -22,6 +22,7 @@ SPIFFS_read rc=-10011  <-- means duplicate file found with same name
 #include "debugLog.h"
 
 #define BUFSIZE 512
+#define OSLOGSIZE 256
 
 const char logfile[] = "/debug.log";
 const char format[] = "%s-%s: ";
@@ -39,17 +40,17 @@ const char* loglevelstr[] = {
   "ERROR"
 };
 
-char os_logbuffer[128] = "";
+char os_logbuffer[OSLOGSIZE] = "";
 // write out every 100ms
 uint32_t os_log_write_timer = 0;
 void os_log(const char c) {
   uint8_t len = strlen(os_logbuffer);
   // overflow - write out immediately, exception?
-  if (len > 120) {
+  if (len > (OSLOGSIZE - 10)) {
     // force output
     os_log_write_timer = 0;
   }
-  if (len == 127) {
+  if (len == (OSLOGSIZE - 1)) {
     os_log_write();
     len = 0;
   }
@@ -122,6 +123,7 @@ uint32_t stackSize() {
 // Stack size: 4kB
 #define DRAM_SIZE 98 * 1024
 #define STACK_SIZE 4 * 1024
+
 void log_meminfo(const char* context) {
   uint32_t freehp = ESP.getFreeHeap();
   uint32_t stack = stackSize();

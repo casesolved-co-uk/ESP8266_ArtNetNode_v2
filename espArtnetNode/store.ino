@@ -29,16 +29,23 @@ void FS_start() {
   //DEBUG_MSG("Status LED Colour: 0x%06X", colour);
   setStatusLed(STATUS_LED_S, colour);
   doStatusLedOutput();
-  if (!okay)
-    ESP.deepSleep(0);
-
-  //log_ls("/");
 
   // Switch OS UART logging:
   // DMXlib does this:
   //system_set_os_print(0);
   //ets_install_putc1((void *) &uart_ignore_char);
   os_install_putc1((void*)os_log);
+
+  // start with basic config for debug.log
+  if (!okay) {
+    webSetup();
+    wifiStart();
+    while(1) {
+      delay(1000);
+    }
+  }
+
+  //log_ls("/");
 }
 
 // check for essential files
@@ -76,6 +83,11 @@ bool validate_FS(CRGB::HTMLColorCode* colour) {
  *  IP address can be set by Artnet RDM, DHCP or user
  */
 void conversions(bool init) {
+  // skip if deviceSettings not initialised properly (FS not available)
+  if (!deviceSettings.containsKey(dhcpEnable)) {
+    return;
+  }
+
   if (!init && (uint8_t)deviceSettings[dhcpEnable]) {
     if (isHotspot) {
       deviceSettings[hotspotIp][0] = ip[0];

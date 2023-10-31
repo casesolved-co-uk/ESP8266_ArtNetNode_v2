@@ -231,13 +231,16 @@ class pageHandler {
 			this.current.className = "show";
 		}
 	}
+	isVisible(controller){
+		return controller.section === this.current;
+	}
 }
 
 class sectionHandler {
 	constructor(elem_id) {
 		const existing = page.get_controller(elem_id);
 		if (existing) {
-			page.open(existing.section.id, existing);
+			existing.display();
 			return;
 		}
 		this.section = document.getElementById(elem_id);
@@ -465,12 +468,25 @@ class firmwareHandler extends sectionHandler {
 }
 
 class miscHandler extends sectionHandler {
-	init() {
+	display() {
+		super.display();
+		if (!this.pending) {
+			this.get_log();
+		}
+	}
+	get_log() {
 		ajax("/debug.log", (e,t) => this.log_result(e,t), {parse: false});
 	}
 	log_result(err, text) {
-		if (!err)
+		this.pending = false;
+		if (!err) {
 			document.getElementById('debugLog').value = text;
+			if (page.isVisible(this)) {
+				this.pending = true;
+				// auto refresh
+				setTimeout(() => this.get_log(), 20000);
+			}
+		}
 	}
 }
 
