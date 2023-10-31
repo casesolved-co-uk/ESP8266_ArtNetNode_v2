@@ -141,7 +141,7 @@ const char* FIRMWARE_VERSION = "v2.1.0";
 #define DMX_TX_A 1
 #define DMX_TX_B 2
 
-#define ONE_PORT  // Testing
+//#define ONE_PORT  // Testing
 // Testing oscilloscope trigger pin
 #define TRIGGER 13 // must use this with any of below
 //#define TRIGGER_DMX

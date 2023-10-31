@@ -13,6 +13,7 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see http://www.gnu.org/licenses/
 
 JS Controller
+[TODO] prevent duplicate instances
 */
 
 let language = languages.en;
@@ -56,6 +57,7 @@ class pageHandler {
 		"na_LPD1886_8BIT":144
 	}
 	constructor() {
+		this.register = {};
 		this.add_modes();
 		this.settings = {};
 		// because new page must return before starting a section
@@ -216,7 +218,13 @@ class pageHandler {
 		if (this.current)
 			this.current.className = "hide";
 	}
-	open(element){
+	get_controller(id){
+		return this.register[id];
+	}
+	// section register & display
+	open(id, controller){
+		const element = controller.section;
+		this.register[id] = controller;
 		if (element !== this.current) {
 			this.closeCurrent();
 			this.current = element;
@@ -227,6 +235,11 @@ class pageHandler {
 
 class sectionHandler {
 	constructor(elem_id) {
+		const existing = page.get_controller(elem_id);
+		if (existing) {
+			page.open(existing.section.id, existing);
+			return;
+		}
 		this.section = document.getElementById(elem_id);
 		this.saveBind();
 		this.init();
@@ -236,7 +249,7 @@ class sectionHandler {
 		// for subclasses
 	}
 	display() {
-		page.open(this.section);
+		page.open(this.section.id, this);
 	}
 	saveBind() {
 		for (const button of this.section.getElementsByTagName("INPUT")) {
@@ -245,20 +258,15 @@ class sectionHandler {
 		}
 	}
 	save(event) {
-		// debounce
-		if (!this.saving) {
-			this.saving = true;
-			this.saveButton = event.target;
-			const json = this.getData(event.target);
-			ajax("/ajax", (e, j) => this.save_result(e, j), {postjs: json, msgElem: event.target});
-		}
+		this.saveButton = event.target;
+		const json = this.getData(event.target);
+		ajax("/ajax", (e, j) => this.save_result(e, j), {postjs: json, msgElem: event.target});
 	}
 	save_result(err, json) {
 		if (!err) {
 			page.updateSettings(err, json);
 			setTimeout(() => page.refresh(), 200);
 		}
-		this.saving = false;
 	}
 	getData(button) {
 		const data = {
@@ -393,8 +401,8 @@ class messageHandler extends sectionHandler {
 	}
 }
 
-const message = new messageHandler("message");
 const page = new pageHandler();
+const message = new messageHandler("message");
 
 class rebootHandler {
 	constructor() {
@@ -467,7 +475,12 @@ class miscHandler extends sectionHandler {
 }
 
 // callback has the form cb(err, json)
+let inAjax = false;
 function ajax(url, callback, {postjs=null, reload=0, parse=true, msgElem=null, file=null, progressElem=null}) {
+	if (inAjax) {
+		callback(1, null);
+	}
+	inAjax = true;
 	const request = new XMLHttpRequest();
 	let msgFunc;
 
@@ -535,6 +548,7 @@ function ajax(url, callback, {postjs=null, reload=0, parse=true, msgElem=null, f
 					location.reload();
 				}, reload);
 			}
+			inAjax = false;
 		}
 	};
 

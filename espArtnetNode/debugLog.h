@@ -47,6 +47,7 @@ void os_log_write();
 void log_ls(char const* path);
 void log_meminfo(const char* context);
 void log_u8_P(const loglevel_t level, const char* context, const char* msg, uint8_t num);
+void log_u32_P(const loglevel_t level, const char* context, const char* msg, uint32_t num);
 int debugLog(const loglevel_t level, const char* context, const char* text);
 int debugLog_P(const loglevel_t level, const char* context, const char* text);
 void debugLogSetup();

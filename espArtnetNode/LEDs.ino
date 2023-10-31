@@ -16,9 +16,6 @@ FastLED support
 */
 
 const char type_err[] PROGMEM = "Invalid LED type number: %d";
-const char buf_err[] PROGMEM = "No LED data buffer: %d";
-const char ctl_err[] PROGMEM = "No LED controller: %d";
-const char toobig_err[] PROGMEM = "Too much LED data: %d";
 
 // Status, channel A & B
 CLEDController* led_controllers[NUM_STATUS_LEDS];
@@ -155,19 +152,19 @@ void set_LEDs(uint8_t controller_idx, uint16_t start_idx, uint8_t* data, uint16_
   const char ctx[] = "set_LEDs";
 
   if (!leds) {
-    log_u8_P(LOG_ERROR, ctx, buf_err, controller_idx);
+    log_u8_P(LOG_ERROR, ctx, PSTR("No LED data buffer: %d"), controller_idx);
     setStatusLed(controller_idx, CRGB::Yellow);
     return;
   }
 
   if (controller_idx == STATUS_LED_A)
-    numPix = deviceSettings[portAnumPix];
+    numPix = (uint16_t)deviceSettings[portAnumPix];
   else
-    numPix = deviceSettings[portBnumPix];
+    numPix = (uint16_t)deviceSettings[portBnumPix];
 
   // 3 channels per RGB LED
   if (start_idx + len > numPix * sizeof(struct CRGB)) {
-    log_u8_P(LOG_ERROR, ctx, toobig_err, controller_idx);
+    log_u32_P(LOG_ERROR, ctx, PSTR("Too much LED data: %u"), start_idx + len);
     setStatusLed(controller_idx, CRGB::Red);
     return;
   }
@@ -179,7 +176,7 @@ bool show_LEDs(uint8_t controller_idx) {
   CLEDController* controller = led_controllers[controller_idx];
 
   if (!controller) {
-    log_u8_P(LOG_ERROR, "show_LEDs", ctl_err, controller_idx);
+    log_u8_P(LOG_ERROR, "show_LEDs", PSTR("No LED controller: %d"), controller_idx);
     return false;
   }
 #ifdef TRIGGER_LEDS
