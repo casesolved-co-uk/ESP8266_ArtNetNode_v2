@@ -212,7 +212,9 @@ bool ajaxSave(uint8_t section, JsonObject json) {
         artRDM.setMerge(portA[0], portA[1], json[portAmerge]);
 
         if ((uint8_t)json[portAmode] >= LED_MODE_START && !reboot) {
-          if ((uint16_t)deviceSettings[portAnumPix] != (uint16_t)json[portAnumPix]) {
+          if (  (uint16_t)deviceSettings[portAnumPix] != (uint16_t)json[portAnumPix] ||
+                (uint8_t)deviceSettings[portApixMode] != (uint8_t)json[portApixMode]
+          ) {
             reboot = true;
           }
         }
@@ -240,7 +242,9 @@ bool ajaxSave(uint8_t section, JsonObject json) {
         artRDM.setMerge(portB[0], portB[1], (uint8_t)json[portBmerge]);
 
         if ((uint8_t)json[portBmode] >= LED_MODE_START && !reboot) {
-          if ((uint16_t)deviceSettings[portBnumPix] != (uint16_t)json[portBnumPix]) {
+          if (  (uint16_t)deviceSettings[portBnumPix] != (uint16_t)json[portBnumPix] ||
+                (uint8_t)deviceSettings[portBpixMode] != (uint8_t)json[portBpixMode]
+          ) {
             reboot = true;
           }
         }

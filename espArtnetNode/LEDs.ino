@@ -19,6 +19,8 @@ const char type_err[] PROGMEM = "Invalid LED type number: %d";
 
 // Status, channel A & B
 CLEDController* led_controllers[NUM_STATUS_LEDS];
+pixPatterns* pixFXA = NULL;
+pixPatterns* pixFXB = NULL;
 uint32_t statusTimer = 0;
 
 #ifdef STATUS_LED_MODE
@@ -28,22 +30,12 @@ uint32_t statusTimer = 0;
 
 void LEDhandler() {
   // Do Pixel FX on port A
-  if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START && (uint8_t)deviceSettings[portApixMode] != FX_MODE_PIXEL_MAP) {
-    if (pixFXA.Update()) {
-      pixADone = false;
-      yield();
-    }
-  }
+  if (pixFXA && pixFXA->Update()) return;
 
   // Do Pixel FX on port B
-  #ifndef ONE_PORT
-    if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START && (uint8_t)deviceSettings[portBpixMode] != FX_MODE_PIXEL_MAP) {
-      if (pixFXB.Update()) {
-        pixBDone = false;
-        yield();
-      }
-    }
-  #endif
+#ifndef ONE_PORT
+  if (pixFXB && pixFXB->Update()) return;
+#endif
 
   // Do pixel string output
   if (!pixADone) {
@@ -52,7 +44,6 @@ void LEDhandler() {
   }
   if (!pixBDone) {
     pixBDone = show_LEDs(STATUS_LED_B);
-    yield();
   }
 }
 
@@ -125,6 +116,13 @@ void led_controller_A() {
   }
   led_controllers[STATUS_LED_A]->setCorrection(portAcorrect);
   led_controllers[STATUS_LED_A]->setTemperature(portAtemperature);
+  // if flickering, try below. Binary dithering enabled by default;
+  //led_controllers[STATUS_LED_A]->setDither(DISABLE_DITHER);
+
+  if ((uint8_t)deviceSettings[portApixMode] != FX_MODE_PIXEL_MAP) {
+    pixFXA = new pixPatterns(led_controllers[STATUS_LED_A]);
+  }
+
   show_LEDs(STATUS_LED_A);
 }
 
@@ -142,14 +140,27 @@ void led_controller_B() {
   }
   led_controllers[STATUS_LED_B]->setCorrection(portBcorrect);
   led_controllers[STATUS_LED_B]->setTemperature(portBtemperature);
+  //led_controllers[STATUS_LED_B]->setDither(DISABLE_DITHER);
+
+  if ((uint8_t)deviceSettings[portBpixMode] != FX_MODE_PIXEL_MAP) {
+    pixFXB = new pixPatterns(led_controllers[STATUS_LED_B]);
+  }
+
   show_LEDs(STATUS_LED_B);
 }
 
 // LED strip could be more than a DMX universe long, so may need to index into the buffer for multiple writes
 void set_LEDs(uint8_t controller_idx, uint16_t start_idx, uint8_t* data, uint16_t len) {
-  uint8_t* leds = (uint8_t*) led_controllers[controller_idx]->leds();
-  uint16_t numPix;
   const char ctx[] = "set_LEDs";
+
+  if (!led_controllers[controller_idx]) {
+    log_u8_P(LOG_ERROR, ctx, PSTR("No LED controller: %d"), controller_idx);
+    setStatusLed(controller_idx, CRGB::Maroon);
+    return;
+  }
+
+  uint8_t* leds = (uint8_t*) led_controllers[controller_idx]->leds();
+  uint16_t numPix = led_controllers[controller_idx]->size();
 
   if (!leds) {
     log_u8_P(LOG_ERROR, ctx, PSTR("No LED data buffer: %d"), controller_idx);
@@ -157,15 +168,10 @@ void set_LEDs(uint8_t controller_idx, uint16_t start_idx, uint8_t* data, uint16_
     return;
   }
 
-  if (controller_idx == STATUS_LED_A)
-    numPix = (uint16_t)deviceSettings[portAnumPix];
-  else
-    numPix = (uint16_t)deviceSettings[portBnumPix];
-
   // 3 channels per RGB LED
   if (start_idx + len > numPix * sizeof(struct CRGB)) {
     log_u32_P(LOG_ERROR, ctx, PSTR("Too much LED data: %u"), start_idx + len);
-    setStatusLed(controller_idx, CRGB::Red);
+    setStatusLed(controller_idx, CRGB::Purple);
     return;
   }
   memcpy(&leds[start_idx], data, len);

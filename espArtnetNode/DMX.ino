@@ -18,6 +18,12 @@ DMX handlers
 
 #include "debugLog.h"
 
+volatile bool newDmxIn = false;
+
+// NOTE: cannot use only 1, DMX RDM lib uses both. Just don't call begin
+espDMX dmxA(0);
+espDMX dmxB(1);
+byte* dataIn;
 
 void DMXInHandle() {
   // Handle received DMX

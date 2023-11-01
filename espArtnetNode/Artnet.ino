@@ -16,6 +16,13 @@ If not, see http://www.gnu.org/licenses/
 Artnet handlers
 */
 
+extern pixPatterns* pixFXA;
+extern pixPatterns* pixFXB;
+
+uint32_t nextNodeReport = 0;
+char nodeError[ARTNET_NODE_REPORT_LENGTH] = "";
+uint32_t nodeErrorTimeout = 0;
+volatile bool nodeErrorShowing = true;
 
 void artStart() {
   char buf[ARTNET_NODE_REPORT_LENGTH];
@@ -206,7 +213,7 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
   #ifdef DEBUG_ESP_PORT
   static uint32_t _count = 0;
   if (_count % 100 == 0) {
-    DEBUG_MSG("ArtDMX grp: %u port: %u num %u sync %u\n", group, port, numChans, syncEnabled);
+    DEBUG_MSG("ArtDMX grp: %u port: %u num: %u sync: %u\n", group, port, numChans, syncEnabled);
   }
   _count++;
   #endif
@@ -227,26 +234,23 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
         if (!syncEnabled)
           pixADone = false;
 
-        return;
-
       // FX 12 Mode
       } else if (port == portA[1]) {
         byte* a = artRDM.getDMX(group, port);
         uint16_t s = (uint8_t)deviceSettings[portApixFXstart] - 1;
         
-        pixFXA.Intensity = a[s + 0];
-        pixFXA.setFX(a[s + 1]);
-        pixFXA.setSpeed(a[s + 2]);
-        pixFXA.Pos = a[s + 3];
-        pixFXA.Size = a[s + 4];
-        
-        pixFXA.setColour1((a[s + 5] << 16) | (a[s + 6] << 8) | a[s + 7]);
-        pixFXA.setColour2((a[s + 8] << 16) | (a[s + 9] << 8) | a[s + 10]);
-        pixFXA.Size1 = a[s + 11];
-        //pixFXA.Fade = a[s + 12];
+        pixFXA->Intensity = a[s + 0];
+        pixFXA->setSpeed(a[s + 2]);
+        pixFXA->Pos = a[s + 3];
+        pixFXA->Size = a[s + 4];
 
-        pixFXA.NewData = 1;
-          
+        pixFXA->Colour1 = CRGB(a[s + 5], a[s + 6], a[s + 7]);
+        pixFXA->Colour2 = CRGB(a[s + 8], a[s + 9], a[s + 10]);
+
+        pixFXA->Size1 = a[s + 11];
+        //pixFXA->Fade = a[s + 12];
+
+        pixFXA->setFX(a[s + 1]);
       }
 
     // DMX modes
@@ -274,24 +278,23 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
         if (!syncEnabled)
           pixBDone = false;
 
-        return;
-
       // FX 12 mode
       } else if (port == portB[1]) {
         byte* a = artRDM.getDMX(group, port);
         uint16_t s = (uint8_t)deviceSettings[portBpixFXstart] - 1;
         
-        pixFXB.Intensity = a[s + 0];
-        pixFXB.setFX(a[s + 1]);
-        pixFXB.setSpeed(a[s + 2]);
-        pixFXB.Pos = a[s + 3];
-        pixFXB.Size = a[s + 4];
-        pixFXB.setColour1((a[s + 5] << 16) | (a[s + 6] << 8) | a[s + 7]);
-        pixFXB.setColour2((a[s + 8] << 16) | (a[s + 9] << 8) | a[s + 10]);
-        pixFXB.Size1 = a[s + 11];
-        //pixFXB.Fade = a[s + 12];
+        pixFXB->Intensity = a[s + 0];
+        pixFXB->setSpeed(a[s + 2]);
+        pixFXB->Pos = a[s + 3];
+        pixFXB->Size = a[s + 4];
 
-        pixFXB.NewData = 1;
+        pixFXB->Colour1 = CRGB(a[s + 5], a[s + 6], a[s + 7]);
+        pixFXB->Colour2 = CRGB(a[s + 8], a[s + 9], a[s + 10]);
+
+        pixFXB->Size1 = a[s + 11];
+        //pixFXB->Fade = a[s + 12];
+
+        pixFXB->setFX(a[s + 1]);
       }
     } else if ((uint8_t)deviceSettings[portBmode] != TYPE_DMX_IN && port == portB[1]) {
       dmxB.chanUpdate(numChans);

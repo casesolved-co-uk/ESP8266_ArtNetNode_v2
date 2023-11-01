@@ -99,7 +99,6 @@
 #include "espDMX_RDM.h"
 #include "espArtNetRDM.h"
 #include "store.h"
-#include "ws2812Driver.h"
 #include "wsFX.h"
 #include "debugLog.h"
 
@@ -107,6 +106,7 @@ extern "C" {
 #include "user_interface.h"
   extern struct rst_info resetInfo;
 }
+extern char nodeError[];
 
 // Set up for reading VCC
 // May not work if ADC line is connected to voltage divider, e.g. Wemos D1 mini
@@ -167,7 +167,8 @@ const char* FIRMWARE_VERSION = "v2.1.0";
 //#define STATUS_DIM 0x0F
 
 // used to store artRDM values in startFunctions:
-uint8_t portA[5], portB[5];
+uint8_t portA[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t portB[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t MAC_array[6];
 IPAddress ip;
 IPAddress subnet;
@@ -175,11 +176,6 @@ IPAddress gateway;
 IPAddress broadcast;
 IPAddress dmxBroadcast;
 
-// NOTE: cannot use only 1, DMX RDM lib uses both. Just don't call begin
-espDMX dmxA(0);
-espDMX dmxB(1);
-
-uint8_t dmxInSeqID = 0;
 
 esp8266ArtNetRDM artRDM;
 AsyncWebServer webServer(80);
@@ -189,26 +185,13 @@ File fsUploadFile;
 
 uint32_t portAcorrect, portBcorrect, portAtemperature, portBtemperature;
 
-// #### REMOVE ?
-//bool statusLedsDim = true;
-//bool statusLedsOff = false;
-ws2812Driver pixDriver;
-pixPatterns pixFXA(0, &pixDriver);
-pixPatterns pixFXB(1, &pixDriver);
-
 volatile bool pixADone = true;
 volatile bool pixBDone = true;
 volatile bool isHotspot = false;
-volatile bool newDmxIn = false;
 volatile bool doReboot = false;
 volatile bool doSave = false;
-volatile bool nodeErrorShowing = true;
 volatile bool settingsLoaded = false;
 
-uint32_t nextNodeReport = 0;
-char nodeError[ARTNET_NODE_REPORT_LENGTH] = "";
-uint32_t nodeErrorTimeout = 0;
-byte* dataIn;
 
 void setup(void) {
   // for meminfo
