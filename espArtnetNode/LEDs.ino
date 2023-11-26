@@ -13,6 +13,8 @@ You should have received a copy of the GNU General Public License along with thi
 If not, see http://www.gnu.org/licenses/
 
 FastLED support
+see color.h for colour correction and temperature
+see pixeltypes.h for CRGB definition and colour codes
 */
 
 const char type_err[] PROGMEM = "Invalid LED type number: %d";
@@ -22,6 +24,7 @@ CLEDController* led_controllers[NUM_STATUS_LEDS];
 pixPatterns* pixFXA = NULL;
 pixPatterns* pixFXB = NULL;
 uint32_t statusTimer = 0;
+CRGB::HTMLColorCode statusColour = CRGB::Black;
 
 #ifdef STATUS_LED_MODE
   CRGB status_leds[NUM_STATUS_LEDS];
@@ -54,12 +57,11 @@ void statusLED() {
   if (statusTimer < millis()) {
 
     // Flash our main status LED
-    if ((statusTimer % 2000) > 1000)
-      setStatusLed(STATUS_LED_S, CRGB::Black);
-    else if (nodeError[0] != '\0') {
-      setStatusLed(STATUS_LED_S, CRGB::Red);
-    } else
-      setStatusLed(STATUS_LED_S, CRGB::Green);
+    if ((statusTimer % 2000) > 1000) {
+      clearStatusLed(STATUS_LED_S);
+    } else {
+      setStatusLed(STATUS_LED_S, statusColour);
+    }
 
     doStatusLedOutput();
     statusTimer = millis() + 1000;
@@ -75,11 +77,7 @@ void LEDSetup() {
 #ifdef STATUS_LED_MODE
   // Status LEDs
   led_controllers[STATUS_LED_S] = &FastLED.addLeds<STATUS_LED_MODE, STATUS_LED_PIN, GRB>(status_leds, NUM_STATUS_LEDS);
-  // see color.h
   led_controllers[STATUS_LED_S]->setCorrection(0xFFFFF0);
-
-  setStatusLed(STATUS_LED_S, CRGB::Magenta);
-  doStatusLedOutput();
 #endif
 
   //  led_controllers started in portSetup
@@ -195,9 +193,17 @@ bool show_LEDs(uint8_t controller_idx) {
   return true;
 }
 
-// colours in pixeltypes.h
+void clearStatusLed(uint8_t num) {
+#ifdef STATUS_LED_MODE
+  status_leds[num] = CRGB::Black;
+#endif
+}
+
 void setStatusLed(uint8_t num, CRGB::HTMLColorCode col) {
 #ifdef STATUS_LED_MODE
+  if (num == STATUS_LED_S) {
+    statusColour = col;
+  }
   status_leds[num] = col;
 #endif
 }
