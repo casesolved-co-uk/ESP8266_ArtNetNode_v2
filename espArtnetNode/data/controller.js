@@ -91,10 +91,14 @@ class pageHandler {
 			}
 
 			for (const num in this.mode_map) {
-				option = document.createElement("option");
-				option.text = this.mode_map[num];
-				option.value = Number(num);
-				select.add(option);
+				if (num === "2" && select.name === "portBmode") {
+					// skip
+				} else {
+					option = document.createElement("option");
+					option.text = this.mode_map[num];
+					option.value = Number(num);
+					select.add(option);
+				}
 			}
 		}
 	}
@@ -135,7 +139,7 @@ class pageHandler {
 		for (const key in this.settings) {
 			const input = document.getElementsByName(key);
 
-			// update everything first
+			// update data fields first
 			for (const elem of input) {
 				switch (elem.nodeName) {
 					case 'P':
@@ -159,6 +163,7 @@ class pageHandler {
 				}
 			}
 
+			const status_num = Number(this.settings[key]);
 			// ip address arrays
 			if (Array.isArray(this.settings[key])) {
 				// A couple of text ip addresses, e.g. ipAddressT:
@@ -175,26 +180,7 @@ class pageHandler {
 			} else if (key.startsWith("port")) {
 				const channel = key[4];
 				if (key.endsWith("mode")) {
-					const pix = document.getElementsByName("port" + channel + "pix");
-					const bcaddr = document.getElementsByName("DmxInBcAddr");
-					const status_num = Number(this.settings[key]);
 					let status_str;
-					// show/hide LED fields
-					if (pix.length) {
-						if (status_num >= 30) { // LED mode
-							for (const elem of pix) elem.style.display = '';
-						} else {
-							for (const elem of pix) elem.style.display = 'none';
-						}
-					}
-					// show/hide DMXIn fields
-					if (bcaddr.length) {
-						if (status_num == 2) { // DMX In
-							for (const elem of bcaddr) elem.style.display = '';
-						} else {
-							for (const elem of bcaddr) elem.style.display = 'none';
-						}
-					}
 					// create port status, same as mode, decode from number unless string
 					if (status_num === NaN) {
 						status_str = this.settings[key];
@@ -206,7 +192,7 @@ class pageHandler {
 						elem.innerHTML = status_str;
 					}
 				}
-			} else if (key === "numPorts" && this.settings[key] === 1) {
+			} else if (key === "numPorts" && status_num === 1) {
 				// Remove Port B
 				for (const elem of document.getElementsByName("portB")) {
 					elem.style.display = 'none';
@@ -315,6 +301,7 @@ class portHandler extends sectionHandler {
 	changeBind() {
 		// display LED pixel config
 		this.pixElements = this.section.querySelectorAll("span[name='portpix']");
+		this.DMXInBC = this.section.querySelectorAll("span[name='DmxInBcAddr']");
 		for (const select of this.section.getElementsByTagName("SELECT")) {
 			if (select.name.endsWith("mode")) {
 				select.addEventListener("change", (e) => this.modeChange(e));
@@ -340,6 +327,11 @@ class portHandler extends sectionHandler {
 			for (const elem of this.pixElements) elem.style.display = "";
 		} else {
 			for (const elem of this.pixElements) elem.style.display = "none";
+		}
+		if (Number(event.target.value) === 2) { // DMX In
+			for (const elem of this.DMXInBC) elem.style.display = "";
+		} else {
+			for (const elem of this.DMXInBC) elem.style.display = "none";
 		}
 	}
 	addrChange(event) {
