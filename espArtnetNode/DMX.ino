@@ -46,7 +46,7 @@ void DMXInHandle() {
     }
 
     artRDM.sendDMX(g, p, dmxBroadcast, dataIn, DmxInChans);
-    setStatusLed(status_led, CRGB::Cyan);
+    setStatusLed(status_led, CRGB::Teal);
     DmxInChans = 0;
 
   #ifdef TRIGGER_DMX_IN
@@ -73,7 +73,7 @@ void portSetup() {
       }
     } else if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
       #ifndef ESP_01
-        setStatusLed(STATUS_LED_A, CRGB::Cyan);
+        setStatusLed(STATUS_LED_A, CRGB::Teal);
       #endif
       
       dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]));

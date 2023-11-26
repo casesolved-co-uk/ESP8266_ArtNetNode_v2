@@ -33,7 +33,8 @@
  *  250kbits/s, 2 stop bits, no parity
  *  Port A uses UART0: IO1 & IO3 OR IO15 & IO13 (Serial.swap() or system_uart_swap/system_uart_de_swap - bootloader not affected) OR IO2 & IO3
  *  Port B uses UART1: IO2 & IO8 but IO8 (RX2) is normally used for flash
- *  Wemos has 470R resistor on TX output preventing in-circuit programming and logging - bridge
+ *  IMPORTANT: means DMXIn is only possible on Port A, and DMXIn will disable RDM
+ *  Wemos has 470R resistor on TX output preventing in-circuit programming and logging - solder bridge out
  *  ESP8266 boot print baud rate: 26MHz clock = 74880, 40MHz clock = 115200
  *  Wemos and ESP-12 series have 26MHz clock
  *  
@@ -43,38 +44,40 @@
  *  WS2812 144 LED strip - 4.6ms
  */
 
-/* casesolved additions:
+/*
   ESP8266 BSP URL: https://arduino.esp8266.com/stable/package_esp8266com_index.json
   BSP v2.5.2 is latest supported on MACOS 10.11, the testing platform
   Copy github repo libs to your sketchbook library and restart
   Copy ESP8266 SPIFFS filesystem uploader to sketchbook tools folder & upload the SPIFFS webserver files (1M size plenty for development)
   Copy source to a sketch folder named espArtnetNode
 
+  casesolved additions:
     Debug log visible from website
     Memory usage logging
     Website code stored as SPIFFS static files and served by ESPAsyncWebServer
     Board config for single DMX port (ONE_PORT) over ajax for dynamic web page
     Website: Dynamically remove Port B, add status and max LED brightnesses
     FASTLED library for all LED driving including options for supported non-clocked LED types
-    [TODO] Reimplement FX library for FastLED
+    Reimplement FX library for FastLED
     Support ESP8266 BSP v2.5.2
     Update to ArduinoJson v6
-    [TODO] Update store to EEPROM_Rotate
     Use json file as settings store instead of struct for sharing with website
-    [TODO] Import other peoples' fixes
     Fix compile warnings
     Redirect debug/exception logging to debug log & remove disable from DMX lib
-    [TODO] Add port disable option
 
-    # Next version:
-    [TODO] Static scene saving
-    [TODO] Chase scene recording and playback, hopefully with a fast RLE for compression
+    # Next version 2:
+    [TODO] Improve & extend FX library effects
+    [TODO] Add port disable option
+    [TODO] Update store to EEPROM_Rotate
+    [TODO] Scene saving from FX library only
+
+    # Version 3
     [TODO] Restyle website with bootstrap
     [TODO] HW: Support clocked LED strip types over single SPI bus - PortC
     [TODO] HW: Move port A to IO15 & IO13 to avoid bootloader output
-    ADC pin fix
+    [TODO] HW: Move LED ports to other IO pins as fixtures on the PortA/B DMX port
 
-    # Major hardware upgrade
+    # Future major hardware upgrade?
     [TODO] HW Upgrade hardware to Wemos S2 mini / ESP32 S2
 
   Artnet 2CH DMX board supported ESP8266 boards: Wemos D1 mini (User supplied) or Generic ESP8266 module (ESP-12S pre-populated)
@@ -87,7 +90,6 @@
 #define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
 #define ARDUINOJSON_USE_LONG_LONG 0
 #include <ArduinoJson.h> // v6
-
 #include <ESP8266WiFi.h>
 //#include <WiFiClient.h>
 #include <ESPAsyncTCP.h>
@@ -96,7 +98,7 @@
 // TODO: Switch to EEPROM_Rotate library to extend life of EEPROM
 #include <EEPROM.h>
 #include <FastLED.h>
-#include "espDMX_RDM.h"
+#include <DmxRdmLib.h>
 #include "espArtNetRDM.h"
 #include "store.h"
 #include "wsFX.h"
@@ -104,9 +106,10 @@
 
 extern "C" {
 #include "user_interface.h"
-  extern struct rst_info resetInfo;
 }
+
 extern char nodeError[];
+extern volatile uint16_t inAJAX;
 
 // Set up for reading VCC
 // May not work if ADC line is connected to voltage divider, e.g. Wemos D1 mini
@@ -143,9 +146,10 @@ const char* FIRMWARE_VERSION = "v2.1.0";
 
 //#define ONE_PORT  // Testing
 // Testing oscilloscope trigger pin
-#define TRIGGER 13 // must use this with any of below
-//#define TRIGGER_DMX
-#define TRIGGER_LEDS
+#define TRIGGER 13  // MOSI must use this with any of below
+//#define TRIGGER_DMX_OUT
+#define TRIGGER_DMX_IN
+//#define TRIGGER_LEDS
 //#define TRIGGER_STATUS
 
 #define STATUS_LED_PIN 12
@@ -236,6 +240,7 @@ void setup(void) {
 
   // FS Should be initialised using ESP8266 Sketch Data Upload tool
   // Also inits the debug log and os logging to file
+  // Inits status LED as Green unless there's an error
   FS_start();
   // ########## Most initialisation after debug log setup && SPIFFS ##########
 
@@ -251,27 +256,22 @@ void setup(void) {
     deviceSettings[resetCounter] = (uint32_t)deviceSettings[resetCounter] + 1;
   else {
     deviceSettings[wdtCounter] = (uint32_t)deviceSettings[wdtCounter] + 1;
-    debugLog(LOG_ERROR, startup, nodeError);
   }
 
   // Webserver (ajax) and wifi (settings) both require config loaded
   // Start web server before wifi since if no client connection and wifi network configured, will restart
   webSetup();
-  yield();
 
   // Start wifi, sets Hotspot mode
   wifiStart();
-  yield();
 
   // Don't start our Artnet or DMX in firmware update mode
   if (!(uint8_t)deviceSettings[doFirmwareUpdate]) {
     // Setup Artnet Ports & Callbacks
     artStart();
-    yield();
 
     // DMX port setup - uses Serial debug port
     portSetup();
-    yield();
   }
 
   deviceSettings[doFirmwareUpdate] = 0;
@@ -284,11 +284,11 @@ void setup(void) {
   //  delay(100);
 
 #ifdef DEBUG_ESP_PORT
-  //WiFi.printDiag(DEBUG_ESP_PORT);
+  // WiFi.printDiag(DEBUG_ESP_PORT);
   DEBUG_ESP_PORT.setDebugOutput(true);
   // builtin LED on GPIO2 also UART1 TX
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
+  // pinMode(LED_BUILTIN, OUTPUT);
+  // digitalWrite(LED_BUILTIN, LOW);
 #endif
 }
 
@@ -303,14 +303,14 @@ void loop(void) {
   artRDM.handler();
 
   // DMX handlers
-#ifdef TRIGGER_DMX
+#ifdef TRIGGER_DMX_OUT
   digitalWrite(TRIGGER, HIGH);
 #endif
   dmxA.handler();
   #ifndef ONE_PORT
     dmxB.handler();
   #endif
-#ifdef TRIGGER_DMX
+#ifdef TRIGGER_DMX_OUT
   digitalWrite(TRIGGER, LOW);
 #endif
   DMXInHandle();
@@ -319,6 +319,7 @@ void loop(void) {
   statusLED();
 
   handleReboot();
+  inAJAX = 0;
 }
 
 
