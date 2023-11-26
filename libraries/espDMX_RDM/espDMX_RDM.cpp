@@ -16,6 +16,10 @@ If not, see http://www.gnu.org/licenses/
 
 #include "espDMX_RDM.h"
 
+// declared here together because the library is designed around using both together
+espDMX dmxA(0);
+espDMX dmxB(1);
+
 void dmx_interrupt_handler(void);
 
 uint16_t dmx_get_tx_fifo_room(dmx_t* dmx);
@@ -49,12 +53,12 @@ void ICACHE_RAM_ATTR dmx_interrupt_handler(void) {
   // stop other interrupts for TX
   noInterrupts();
   
-  if(U0IS & (1 << UIFE)) {    // TX0 Fifo Empty
+  if(dmxA._dmx && U0IS & (1 << UIFE)) {    // TX0 Fifo Empty
     U0IC = (1 << UIFE);       // clear status flag
     dmxA._transmit();
   }
 
-  if(U1IS & (1 << UIFE)) {    // TX1 Fifo Empty
+  if(dmxB._dmx && U1IS & (1 << UIFE)) {    // TX1 Fifo Empty
     U1IC = (1 << UIFE);       // clear status flag
     dmxB._transmit();
   }
