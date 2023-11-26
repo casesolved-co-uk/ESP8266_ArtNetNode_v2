@@ -25,13 +25,9 @@ extern "C" {
 
 
 
-void _artClearDMXBuffer(byte* buf);
-
-
 void _artClearDMXBuffer(byte* buf) {
-  memset(buf, 0, DMX_BUFFER_SIZE);
-  //for (uint16_t x = 0; x < DMX_BUFFER_SIZE; x++)
-  //  buf[x] = 0;
+  if (buf)
+    memset(buf, 0, sizeof(byte) * DMX_BUFFER_SIZE);
 }
 
 esp8266ArtNetRDM::esp8266ArtNetRDM() {
