@@ -63,6 +63,8 @@ void FS_start();
 void conversions(bool init = false);
 
 // Settings Keywords
+const char espArtNetNode[] = "espArtNetNode";
+
 const char ipAddress[] = "ipAddress";
 const char subAddress[] = "subAddress";
 const char gwAddress[] = "gwAddress";

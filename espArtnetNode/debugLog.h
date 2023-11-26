@@ -26,6 +26,8 @@ extern char* stack_start;
 
 // debug helper
 const char startup[] = "Startup";
+const char msg_u32[] PROGMEM = "0x%08X";
+const char msg_u8[] PROGMEM = "0x%02X";
 
 #ifdef DEBUG_ESP_PORT
   #define DEBUG_MSG(...) DEBUG_ESP_PORT.printf( __VA_ARGS__ )
@@ -42,8 +44,8 @@ typedef enum loglevel_t {
   LOG_ERROR
 } loglevel_t;
 
-void os_log(const char c);
-void os_log_write();
+void ICACHE_RAM_ATTR os_log(char);
+void ICACHE_RAM_ATTR os_log_write();
 void log_ls(char const* path);
 void log_meminfo(const char* context);
 void log_u8_P(const loglevel_t level, const char* context, const char* msg, uint8_t num);

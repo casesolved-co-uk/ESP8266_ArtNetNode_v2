@@ -19,6 +19,7 @@ SPIFFS_read rc=-10011  <-- means duplicate file found with same name
 
 #include <FS.h> // SPIFFS
 #include <string.h>
+#include "ets_sys.h" // ICACHE_RAM_ATTR
 #include "debugLog.h"
 
 #define BUFSIZE 512
@@ -40,10 +41,12 @@ const char* loglevelstr[] = {
   "ERROR"
 };
 
-char os_logbuffer[OSLOGSIZE] = "";
+char os_logbuffer[OSLOGSIZE];
 // write out every 100ms
 uint32_t os_log_write_timer = 0;
-void os_log(const char c) {
+
+void ICACHE_RAM_ATTR
+os_log(char c) {
   uint8_t len = strlen(os_logbuffer);
   // overflow - write out immediately, exception?
   if (len > (OSLOGSIZE - 10)) {
@@ -59,7 +62,8 @@ void os_log(const char c) {
 }
 
 // call in main loop
-void os_log_write() {
+void ICACHE_RAM_ATTR
+os_log_write() {
   if (os_logbuffer[0] != '\0' && os_log_write_timer < millis()) {
     File f = SPIFFS.open(logfile, "a");
     if (f) {
@@ -139,6 +143,8 @@ void log_meminfo(const char* context) {
 void debugLogSetup() {
   size_t fsize = 0;
   char buf[160];
+
+  os_logbuffer[0] = '\0';
   File f = SPIFFS.open(logfile, "r");
 
   FSInfo fs_info;

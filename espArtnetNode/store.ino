@@ -18,7 +18,7 @@ const char files[][20] = {
 const char store[] = "store";
 
 void FS_start() {
-  CRGB::HTMLColorCode colour = CRGB::Gray;
+  CRGB::HTMLColorCode colour = CRGB::Green;
   bool okay;
   // Start SPIFFS file system, will be formatted if it does not exist
   SPIFFS.begin();
@@ -32,9 +32,11 @@ void FS_start() {
 
   // Switch OS UART logging:
   // DMXlib does this:
-  //system_set_os_print(0);
+  system_set_os_print(0);
   //ets_install_putc1((void *) &uart_ignore_char);
-  os_install_putc1((void*)os_log);
+  // func needs to be in IRAM:
+  ets_install_putc1((void *) &os_log);
+  //os_install_putc1(os_log);
 
   // start with basic config for debug.log
   if (!okay) {
@@ -121,6 +123,7 @@ void conversions(bool init) {
     ip = IPAddress((uint8_t)deviceSettings[hotspotIp][0],(uint8_t)deviceSettings[hotspotIp][1],(uint8_t)deviceSettings[hotspotIp][2],(uint8_t)deviceSettings[hotspotIp][3]);
     subnet = IPAddress((uint8_t)deviceSettings[hotspotSubnet][0],(uint8_t)deviceSettings[hotspotSubnet][1],(uint8_t)deviceSettings[hotspotSubnet][2],(uint8_t)deviceSettings[hotspotSubnet][3]);
     // self ip is used as gateway in hotspot mode
+    // INADDR_NONE is a constant IPAddress value from arduino/IPAddress.h
     gateway = INADDR_NONE;
   }
   else {
