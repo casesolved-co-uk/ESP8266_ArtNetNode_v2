@@ -16,21 +16,24 @@ If not, see http://www.gnu.org/licenses/
 DMX handlers
 */
 
+#include <DmxRdmLib.h>
 #include "debugLog.h"
 
-volatile bool newDmxIn = false;
 
-// NOTE: cannot use only 1, DMX RDM lib uses both. Just don't call begin
-espDMX dmxA(0);
-espDMX dmxB(1);
-byte* dataIn;
+// dmxA and dmxB are declared by the library because it handles both channels together
+// Just don't call begin on a channel if you don't want to use it
+
+uint16_t DmxInChans = 0;
+byte* dataIn = NULL;
 
 void DMXInHandle() {
   // Handle received DMX
-  if (newDmxIn) {
+  if (DmxInChans) {
     uint8_t g, p, status_led;
 
-    newDmxIn = false;
+  #ifdef TRIGGER_DMX_IN
+    digitalWrite(TRIGGER, HIGH);
+  #endif
 
     if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
       g = portA[0];
@@ -42,17 +45,22 @@ void DMXInHandle() {
       status_led = STATUS_LED_B;
     }
 
-    artRDM.sendDMX(g, p, dmxBroadcast, dataIn, 512);
+    artRDM.sendDMX(g, p, dmxBroadcast, dataIn, DmxInChans);
     setStatusLed(status_led, CRGB::Cyan);
+    DmxInChans = 0;
+
+  #ifdef TRIGGER_DMX_IN
+    digitalWrite(TRIGGER, LOW);
+  #endif
   }
 }
 
 
 void portSetup() {
-  DEBUG_LN("Starting ports...");
-
   #ifdef DEBUG_ESP_PORT
+    DEBUG_LN("Starting ports...");
     DEBUG_LN("Port A debug mode");
+    delay(5);
   #else
     if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_OUT || (uint8_t)deviceSettings[portAmode] == TYPE_RDM_OUT) {
       setStatusLed(STATUS_LED_A, CRGB::Blue);
@@ -72,8 +80,7 @@ void portSetup() {
       dmxA.dmxIn(true);
       dmxA.setInputCallback(dmxIn);
   
-      dataIn = (byte*) os_malloc(sizeof(byte) * 512);
-      memset(dataIn, 0, 512);
+      dataIn = (byte*) os_zalloc(sizeof(byte) * 512);
   
     } else {
       #ifndef ESP_01
@@ -96,15 +103,14 @@ void portSetup() {
       }
     } else if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_IN) {
       #ifndef ESP_01
-        setStatusLed(STATUS_LED_B, CRGB::Cyan);
+        setStatusLed(STATUS_LED_B, CRGB::Teal);
       #endif
 
       dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]));
       dmxB.dmxIn(true);
       dmxB.setInputCallback(dmxIn);
 
-      dataIn = (byte*) os_malloc(sizeof(byte) * 512);
-      memset(dataIn, 0, 512);
+      dataIn = (byte*) os_zalloc(sizeof(byte) * 512);
 
     } else {
       #ifndef ESP_01
@@ -114,26 +120,41 @@ void portSetup() {
       led_controller_B();
     }
   #endif
-
-  //pixDriver.allowInterruptSingle = WS2812_ALLOW_INT_SINGLE;
-  //pixDriver.allowInterruptDouble = WS2812_ALLOW_INT_DOUBLE;
 }
 
-// DMX callback
+// DMX RDM callbacks
+void rdmReceivedA(rdm_data* c) {
+  artRDM.rdmResponse(c, portA[0], portA[1]);
+}
+
+void sendTodA() {
+  artRDM.artTODData(portA[0], portA[1], dmxA.todMan(), dmxA.todDev(), dmxA.todCount(), dmxA.todStatus());
+}
+
+#ifndef ONE_PORT
+void rdmReceivedB(rdm_data* c) {
+  artRDM.rdmResponse(c, portB[0], portB[1]);
+}
+
+void sendTodB() {
+  artRDM.artTODData(portB[0], portB[1], dmxB.todMan(), dmxB.todDev(), dmxB.todCount(), dmxB.todStatus());
+}
+#endif
+
+// DMX In callback
 void dmxIn(uint16_t numChans) {
-  (void) numChans;
+  DmxInChans = numChans;
   espDMX* dmx;
 
-  if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_IN) {
-    dmx = &dmxB;
-  } else {
+  // PortB doesn't actually support DMXIn
+  if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
     dmx = &dmxA;
+  } else {
+    dmx = &dmxB;
   }
 
   // could be overwritten with 0
   byte* tmp = dataIn;
   dataIn = dmx->getChans();
   dmx->setBuffer(tmp);
-  
-  newDmxIn = true;
 }

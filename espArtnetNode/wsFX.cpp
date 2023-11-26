@@ -13,7 +13,7 @@ warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Ge
 You should have received a copy of the GNU General Public License along with this program.
 If not, see http://www.gnu.org/licenses/
 
-FastLED 12 channel pixel FX
+FastLED 14 channel pixel FX
 */
 
 
@@ -21,35 +21,64 @@ FastLED 12 channel pixel FX
 
 pixPatterns::pixPatterns(CLEDController* c) {
   controller = c;
-  lastUpdate = 0;
+  nextUpdate = 0;
+  nextRefresh = 0;
+  delayEnd = 0;
   Intensity = 0;
   Speed = 0;
   TotalSteps = 100;
   ActivePattern = NONE;
 }
 
+void pixPatterns::DMXSet(byte* buffer) {
+  Intensity = buffer[iIntensity];
+  setSpeed(buffer[iSpeed]);
+  Pos = buffer[iPosition];
+  Size = buffer[iSize1];
+  Colour1 = CRGB(buffer[iColour1], buffer[iColour1+1], buffer[iColour1+2]); // background
+  Size1 = buffer[iSize2];
+  Colour2 = CRGB(buffer[iColour2], buffer[iColour2+1], buffer[iColour2+2]); // active
+  setFade(buffer[iFade]);
+  Delay = REFRESH_INTERVAL * DELAY_MULTIPLIER * buffer[iDelay]; // milliseconds
+
+  // depends on other params
+  setFX(buffer[iEffect]);
+}
+
 // when calling do setup last, after setting other params
 void pixPatterns::setFX(uint8_t fx) {
-  if (fx < 50)
+  FXPattern before = ActivePattern;
+
+  if (fx < 25)
     Static();
-  else if (fx < 75)
+  else if (fx < 50)
     RainbowCycle();
-  else if (fx < 100)
+  else if (fx < 75)
     TheaterChase();
-  else if (fx < 125)
+  else if (fx < 100)
     Twinkle();
-  else if (fx < 150)
+  else if (fx < 125)
     GradientStripe();
+  else if (fx < 150)
+    Kitt();
+
+  // resets
+  if (before != ActivePattern) {
+    Index = 0;
+    FadeCounter = FadeCount;
+    controller->clearLedData();
+  }
 }
 
 // Called in main loop
 bool pixPatterns::Update(void) {
   bool ret = false;
+  unsigned long now = millis();
 
-  if((millis() - lastUpdate) > Interval) { // time to update
-    lastUpdate = millis();
+  if (now >= nextUpdate && now >= delayEnd) { // time to update
+    nextUpdate = now + Interval;
     ret = true;
-    
+
     switch(ActivePattern) {
       case STATIC:
         StaticUpdate();
@@ -66,21 +95,35 @@ bool pixPatterns::Update(void) {
       case GRADIENT_STRIPE:
         GradientStripeUpdate();
         break;
+      case KITT:
+        KittUpdate();
+        break;
       default: // NONE - have not been initialised
         return false;
     }
   }
 
+  now = millis();
   // update more frequently for dithering at low brightness
-  if((millis() - lastRefresh) > REFRESH_INTERVAL) {
+  if (now >= nextRefresh) {
     if (ret)
       yield(); // we have spent time updating so yield first
-    lastRefresh = millis();
+    nextRefresh = now + REFRESH_INTERVAL;
 
   #ifdef TRIGGER_LEDS
     digitalWrite(TRIGGER, HIGH);
   #endif
 
+    if (FadeStep && FadeType) {
+      if (!FadeCounter--) { // we reached zero
+        FadeCounter = FadeCount; // can be zero for every loop
+        if (FadeType == FADE_TOBLACK) {
+          fadeToBlackBy(controller->leds(), controller->size(), FadeStep);
+        } else if (FadeType == FADE_TOCOL1) {
+          fadeUsingColor(controller->leds(), controller->size(), Colour1);
+        }
+      }
+    }
     controller->showLeds(Intensity);
 
   #ifdef TRIGGER_LEDS
@@ -97,15 +140,25 @@ void pixPatterns::Increment(void) {
   if (Speed > 131) {
     Index++;
     
-    if (Index >= TotalSteps)
+    if (Index >= TotalSteps) {
       Index = 0;
+      delayEnd = millis() + Delay;
+    }
   
   } else if (Speed < 123) {
-    if (Index == 0 || Index > TotalSteps)
+    if (Index == 0 || Index > TotalSteps) {
       Index = TotalSteps - 1;
-    else
+      delayEnd = millis() + Delay;
+    } else {
       Index--;
+    }
   }
+}
+
+// count of REFRESH_INTERVAL loops then decrement by FADE_STEP
+void pixPatterns::setFade(uint8_t f) {
+  FadeStep = f==255 ? 0 : 1;
+  FadeCount = f;
 }
 
 void pixPatterns::setSpeed(uint8_t s) {
@@ -131,7 +184,9 @@ void pixPatterns::setSpeed(uint8_t s) {
   }
 }
 
+
 // ################################# EFFECTS ###################################
+
 
 // Initialize static looks
 void pixPatterns::Static(void) {
@@ -139,10 +194,9 @@ void pixPatterns::Static(void) {
     return;
   
   ActivePattern = STATIC;
-  Index = 0;
   TotalSteps = controller->size();
+  FadeType = FADE_DISABLE;
 }
-
 // Update the static look
 void pixPatterns::StaticUpdate(void) {
 
@@ -166,16 +220,16 @@ void pixPatterns::StaticUpdate(void) {
   Increment();
 }
 
+
 // Initialize for a RainbowCycle
 void pixPatterns::RainbowCycle(void) {
   if (ActivePattern == RAINBOW_CYCLE)
     return;
   
   ActivePattern = RAINBOW_CYCLE;
-  Index = 0;
   TotalSteps = 255;
+  FadeType = FADE_DISABLE;
 }
-
 // Update the Rainbow Cycle Pattern
 void pixPatterns::RainbowCycleUpdate(void) {
   uint16_t hueStep = 256 / (Size + 2); // 0 -> 128, 255 -> 0
@@ -184,16 +238,16 @@ void pixPatterns::RainbowCycleUpdate(void) {
   Increment();
 }
 
+
 // Initialize for a Theater Chase
 void pixPatterns::TheaterChase(void) {
   if (ActivePattern == THEATER_CHASE)
     return;
   
   ActivePattern = THEATER_CHASE;
-  Index = 0;
   TotalSteps = controller->size();
+  FadeType = FADE_TOCOL1;
 }
-
 // Update the Theater Chase Pattern
 void pixPatterns::TheaterChaseUpdate(void) {
   uint8_t mSize = map(Size, 0, 255, 3, 50);
@@ -208,62 +262,79 @@ void pixPatterns::TheaterChaseUpdate(void) {
   Increment();
 }
 
+
 // Initialize for Twinkle
 void pixPatterns::Twinkle(void) {
   if (ActivePattern == TWINKLE)
     return;
   
   ActivePattern = TWINKLE;
-  Index = 0;
   TotalSteps = 3;
+  FadeType = FADE_TOCOL1;
 
   randomSeed(analogRead(0));
 }
-
 // Update the Twinkle Pattern
 void pixPatterns::TwinkleUpdate(void) {
+  // Fade resets the twinkles
   // Set strip to Colour 1
-  if (Index % 3 == 0 || Speed < 20 || Speed > 235) {
-    fill_solid(controller->leds(), controller->size(), Colour1);
-  }
+//  if (Index % 3 == 0 || Speed < 20 || Speed > 235) {
+//    fill_solid(controller->leds(), controller->size(), Colour1);
+//  }
 
   // Make twinkles
   if (Index % 3 == 0 && Speed >= 20 && Speed <= 235) {
     uint16_t numTwinks = map(Size, 0, 255, 1, (controller->size() / 10));
     for (uint8_t n = 0; n < numTwinks; n++)
       controller->leds()[random(0, controller->size())] = Colour2;
-      //pixDriver->setPixel(Port, random(0, controller->size()), Colour2);
   }
   
   Increment();
 }
 
+
 //TODO: fix
 void pixPatterns::GradientStripe() {
   if (ActivePattern != GRADIENT_STRIPE) {
     ActivePattern = GRADIENT_STRIPE;
-    Index = 0;
     TotalSteps = controller->size();
+    FadeType = FADE_TOBLACK;
   }
 
   Palette = CRGBPalette16(Colour1, Colour2);
 }
-
 void pixPatterns::GradientStripeUpdate() {
   uint16_t mStart = map(Pos + Index, 0, 255, 0, TotalSteps-1);
   uint16_t mSize = map(Size, 0, 255, 1, TotalSteps);
   uint16_t remaining = TotalSteps - mStart;
   if (remaining < mSize)
     mSize = remaining;
-  controller->clearLedData();
+
   //L pointer to the LED array to fill, N number of LEDs, startIndex in the palette, incIndex how much to increment the palette color index per LED
   fill_palette(&(controller->leds()[mStart]), mSize, 0, 256 / mSize, Palette, 255, LINEARBLEND);
   //fill_palette_circular(controller->leds(), mSize, mPos, palette);
   Increment();
 }
-// ################################# HELPERS ###################################
 
-// Calculate 50% dimmed version of a colour (used by ScannerUpdate)
-uint32_t pixPatterns::DimColour(uint32_t colour) {
-  return ((colour & 0xFEFEFE) >> 1);
+
+void pixPatterns::Kitt() {
+  if (ActivePattern != KITT) {
+    ActivePattern = KITT;
+    TotalSteps = controller->size() * 2;
+    FadeType = FADE_TOCOL1;
+  }
+}
+void pixPatterns::KittUpdate() {
+  uint16_t halfway = controller->size();
+  uint16_t start = map(Pos, 0, 255, 0, halfway);
+  uint16_t idx;
+
+  if (Index < halfway) {
+    idx = Index;
+  } else {
+    idx = halfway - (Index % halfway) - 1;
+  }
+
+  controller->leds()[(start + idx) % halfway] = Colour2;
+  Increment();
 }

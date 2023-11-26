@@ -13,15 +13,7 @@ warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Ge
 You should have received a copy of the GNU General Public License along with this program.
 If not, see http://www.gnu.org/licenses/
 
-FastLED 12 channel pixel FX:
-Ch1: Intensity
-Ch2: Effect
-Ch3: Speed
-Ch4: Pos
-Ch5: Size
-Ch6-8:  Colour1 RGB
-Ch9-11: Colour2 RGB
-Ch12: Size1
+FastLED 14 channel pixel FX
 */
 
 
@@ -34,32 +26,66 @@ Ch12: Size1
 #define MIN_FXINTERVAL 1 // milliseconds
 #define MAX_FXINTERVAL 100
 #define REFRESH_INTERVAL 5
-
-// see FastLED colorutils.h
-enum  pattern { STATIC, RAINBOW_CYCLE, THEATER_CHASE, TWINKLE, GRADIENT_STRIPE, NONE };
+#define DELAY_MULTIPLIER 10 // multiply up to 50ms
+#define FADE_STEP 10 // decrement brightness step
 
 class pixPatterns {
+  // see FastLED colorutils.h
+  enum FXPattern {
+    STATIC,
+    RAINBOW_CYCLE,
+    THEATER_CHASE,
+    TWINKLE,
+    GRADIENT_STRIPE,
+    KITT,
+    NONE
+  };
+
+  enum FXFade {
+    FADE_DISABLE=0,
+    FADE_TOBLACK=1,
+    FADE_TOCOL1=2
+  };
+
+  enum FXChannelMap {
+    iIntensity=0,
+    iEffect=1,
+    iSpeed=2,
+    iPosition=3,
+    iSize1=4,
+    iColour1=5,
+    iSize2=8,
+    iColour2=9,
+    iFade=12,
+    iDelay=13
+  };
+
   public:
-    pattern  ActivePattern;       // which pattern is running
-    
+    FXPattern  ActivePattern;     // which pattern is running
+
     unsigned long Interval;       // milliseconds between updates
-    unsigned long lastUpdate;     // last update of position
-    unsigned long lastRefresh;    // last LED output
-    
+    unsigned long nextUpdate;     // next update of position
+    unsigned long nextRefresh;    // next LED output
+    unsigned long delayEnd;       // next FX start
+
     CRGB Colour1, Colour2;        // Colours pre-intensity
     CRGBPalette16 Palette;        // palette for suitable effects
     uint16_t TotalSteps;          // total number of steps in the pattern
     uint16_t Index;               // current step within the pattern
-    uint8_t Speed;                 // speed of effect (0 = stop, -ve is reverse, +ve is forwards)
-    uint8_t Size1, Size, Fade, Pos; // size, fading & position for static looks
+    uint8_t Speed;                // speed of effect (0 = stop, -ve is reverse, +ve is forwards)
+    uint8_t Size1, Size, Pos;     // size, fading & position for static looks
     uint8_t Intensity;
+    uint8_t FadeCount, FadeCounter, FadeStep, FadeType;
+    uint16_t Delay;               // REFRESH_INTERVAL * DELAY_MULTIPLIER * Delay
 
     CLEDController* controller;  // FastLED controller
 
     // Methods
     pixPatterns(CLEDController* controller);
+    void DMXSet(byte* buffer);
     bool Update(void);
     void Increment(void);
+    void setFade(uint8_t f);
     void setSpeed(uint8_t s);
     void setFX(uint8_t fx);
     void Static(void);
@@ -72,7 +98,8 @@ class pixPatterns {
     void TwinkleUpdate(void);
     void GradientStripe(void);
     void GradientStripeUpdate(void);
-    uint32_t DimColour(uint32_t colour);
+    void Kitt(void);
+    void KittUpdate(void);
 };
 
 #endif

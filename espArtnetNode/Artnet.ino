@@ -16,6 +16,8 @@ If not, see http://www.gnu.org/licenses/
 Artnet handlers
 */
 
+#include <DmxRdmLib.h>
+
 extern pixPatterns* pixFXA;
 extern pixPatterns* pixFXB;
 
@@ -234,23 +236,11 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
         if (!syncEnabled)
           pixADone = false;
 
-      // FX 12 Mode
+      // FX 14 Mode
       } else if (port == portA[1]) {
         byte* a = artRDM.getDMX(group, port);
         uint16_t s = (uint8_t)deviceSettings[portApixFXstart] - 1;
-        
-        pixFXA->Intensity = a[s + 0];
-        pixFXA->setSpeed(a[s + 2]);
-        pixFXA->Pos = a[s + 3];
-        pixFXA->Size = a[s + 4];
-
-        pixFXA->Colour1 = CRGB(a[s + 5], a[s + 6], a[s + 7]);
-        pixFXA->Colour2 = CRGB(a[s + 8], a[s + 9], a[s + 10]);
-
-        pixFXA->Size1 = a[s + 11];
-        //pixFXA->Fade = a[s + 12];
-
-        pixFXA->setFX(a[s + 1]);
+        pixFXA->DMXSet(&a[s]);
       }
 
     // DMX modes
@@ -278,23 +268,11 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
         if (!syncEnabled)
           pixBDone = false;
 
-      // FX 12 mode
+      // FX 14 mode
       } else if (port == portB[1]) {
         byte* a = artRDM.getDMX(group, port);
         uint16_t s = (uint8_t)deviceSettings[portBpixFXstart] - 1;
-        
-        pixFXB->Intensity = a[s + 0];
-        pixFXB->setSpeed(a[s + 2]);
-        pixFXB->Pos = a[s + 3];
-        pixFXB->Size = a[s + 4];
-
-        pixFXB->Colour1 = CRGB(a[s + 5], a[s + 6], a[s + 7]);
-        pixFXB->Colour2 = CRGB(a[s + 8], a[s + 9], a[s + 10]);
-
-        pixFXB->Size1 = a[s + 11];
-        //pixFXB->Fade = a[s + 12];
-
-        pixFXB->setFX(a[s + 1]);
+        pixFXB->DMXSet(&a[s]);
       }
     } else if ((uint8_t)deviceSettings[portBmode] != TYPE_DMX_IN && port == portB[1]) {
       dmxB.chanUpdate(numChans);
@@ -384,24 +362,6 @@ void rdmHandle(uint8_t group, uint8_t port, rdm_data* c) {
       dmxB.rdmSendCommand(c);
   #endif
 }
-
-void rdmReceivedA(rdm_data* c) {
-  artRDM.rdmResponse(c, portA[0], portA[1]);
-}
-
-void sendTodA() {
-  artRDM.artTODData(portA[0], portA[1], dmxA.todMan(), dmxA.todDev(), dmxA.todCount(), dmxA.todStatus());
-}
-
-#ifndef ONE_PORT
-void rdmReceivedB(rdm_data* c) {
-  artRDM.rdmResponse(c, portB[0], portB[1]);
-}
-
-void sendTodB() {
-  artRDM.artTODData(portB[0], portB[1], dmxB.todMan(), dmxB.todDev(), dmxB.todCount(), dmxB.todStatus());
-}
-#endif
 
 void todRequest(uint8_t group, uint8_t port) {
   if (portA[0] == group && portA[1] == port)
