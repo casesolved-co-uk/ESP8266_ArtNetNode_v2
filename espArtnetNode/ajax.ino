@@ -18,6 +18,7 @@ If not, see http://www.gnu.org/licenses/
 const char scene_msg[] PROGMEM = "Not outputting, %u Scenes Recorded, %u of %u bytes used";
 const char err_generic[] = "Failed to save data. Reload page and try again.";
 const char err_2dmx_in[] = "Cannot have DMX Input on two channels";
+const char err_dmxB_in[] = "DMX Input not supported on Port B";
 const char err_no_dmxin_rdm[] = "Cannot mix DMX Input and RDM";
 const char err_dmxin_artnet[] = "DMX Input only supports Artnet currently";
 const char err_outofrange[] = "Value out of range";
@@ -25,22 +26,25 @@ const char err_wrongtype[] = "Wrong type";
 const char* err_msg;
 const char success[] = "success";
 const char message[] = "message";
-const char busy[] = "{\"success\":0,\"message\":\"Device busy\"}";
 
-volatile uint8_t inAJAX = 0;
+volatile uint16_t inAJAX = 0;
+
 
 AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/ajax", [](AsyncWebServerRequest *request, JsonVariant jsin) {
   // Gets reused as reply
   JsonObject json = jsin.as<JsonObject>();
   String reply;
+  uint16_t reply_status = 200;
 
+  // Only single ajax request allowed per main loop
   if (inAJAX++) {
-    request->send(503, JSON_MIMETYPE, busy);
-    return;
-  }
+    json.clear();
+    json[success] = 0;
+    json[message] = "Device busy";
+    reply_status = 503;
 
   // Handle request to reboot into update mode
-  if (json["doUpdate"]) {
+  } else if (json["doUpdate"]) {
     uint8_t updateStage = (uint8_t)json["doUpdate"];
     json.clear();
     json[success] = 1;
@@ -79,30 +83,25 @@ AsyncCallbackJsonWebHandler* ajaxHandler = new AsyncCallbackJsonWebHandler("/aja
     json.clear();
     json[success] = 0;
     json[message] = "Invalid request";
-    serializeJson(json, reply);
-    request->send(400, JSON_MIMETYPE, reply);
-    return;
+    reply_status = 400;
   }
 
   serializeJson(json, reply);
-  request->send(200, JSON_MIMETYPE, reply);
-  inAJAX = 0;
+  request->send(reply_status, JSON_MIMETYPE, reply);
 });
 
-int starts_with(const char *str, const char *prefix) {
+bool starts_with(const char *str, const char *prefix) {
   size_t str_len = strlen(str);
   size_t prefix_len = strlen(prefix);
 
-  return (str_len >= prefix_len) &&
-         (!memcmp(str, prefix, prefix_len));
+  return (str_len >= prefix_len) && (memcmp(str, prefix, prefix_len) == 0);
 }
 
-int ends_with(const char *str, const char *suffix) {
+bool ends_with(const char *str, const char *suffix) {
   size_t str_len = strlen(str);
   size_t suffix_len = strlen(suffix);
 
-  return (str_len >= suffix_len) &&
-         (!memcmp(str + str_len - suffix_len, suffix, suffix_len));
+  return (str_len >= suffix_len) && (memcmp(str + str_len - suffix_len, suffix, suffix_len) == 0);
 }
 
 bool ajaxSave(uint8_t section, JsonObject json) {
@@ -111,7 +110,7 @@ bool ajaxSave(uint8_t section, JsonObject json) {
   bool reboot = false;
   err_msg = err_generic;
 
-  log_meminfo("before_save");
+  log_meminfo("ajaxSave");
 
   // checks new values from the input
   for (JsonPair kv : json) {
@@ -131,6 +130,8 @@ bool ajaxSave(uint8_t section, JsonObject json) {
           return false;
         }
       } else if (strcmp(key, portBmode) == 0 && (uint8_t)kv.value() == TYPE_DMX_IN) {
+        err_msg = err_dmxB_in;
+        return false;
         if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
           err_msg = err_2dmx_in;
           return false;
@@ -194,64 +195,10 @@ bool ajaxSave(uint8_t section, JsonObject json) {
       break;
 
     case 0xA:     // Port A
-      {
-        bool e131 = ((uint8_t)json[portAprot] == PROT_ARTNET_SACN) ? true : false;
-        for (uint8_t x = 0; x < 4; x++) {
-          artRDM.setE131(portA[0], portA[x+1], e131);
-          artRDM.setE131Uni(portA[0], portA[x+1], json[portAsACNuni][x]);
-        }
-
-        if (deviceSettings[portAmode] != json[portAmode]) {
-          reboot = true;
-        }
-
-        // Update the Artnet class
-        artRDM.setNet(portA[0], json[portAnet]);
-        artRDM.setSubNet(portA[0], json[portAsub]);
-        artRDM.setUni(portA[0], portA[1], json[portAuni][0]);
-        artRDM.setMerge(portA[0], portA[1], json[portAmerge]);
-
-        if ((uint8_t)json[portAmode] >= LED_MODE_START && !reboot) {
-          if (  (uint16_t)deviceSettings[portAnumPix] != (uint16_t)json[portAnumPix] ||
-                (uint8_t)deviceSettings[portApixMode] != (uint8_t)json[portApixMode]
-          ) {
-            reboot = true;
-          }
-        }
-        ret = true;
-        break;
-      }
-
     case 0xB:     // Port B
-      #ifndef ONE_PORT
-      {
-        bool e131 = ((uint8_t)json[portBprot] == PROT_ARTNET_SACN) ? true : false;
-        for (uint8_t x = 0; x < 4; x++) {
-          artRDM.setE131(portB[0], portB[x+1], e131);
-          artRDM.setE131Uni(portB[0], portB[x+1], json[portBsACNuni][x]);
-        }
-
-        if (deviceSettings[portBmode] != json[portBmode]) {
-          reboot = true;
-        }
-
-        // Update the Artnet class
-        artRDM.setNet(portB[0], (uint8_t)json[portBnet]);
-        artRDM.setSubNet(portB[0], (uint8_t)json[portBsub]);
-        artRDM.setUni(portB[0], portB[1], json[portBuni][0]);
-        artRDM.setMerge(portB[0], portB[1], (uint8_t)json[portBmerge]);
-
-        if ((uint8_t)json[portBmode] >= LED_MODE_START && !reboot) {
-          if (  (uint16_t)deviceSettings[portBnumPix] != (uint16_t)json[portBnumPix] ||
-                (uint8_t)deviceSettings[portBpixMode] != (uint8_t)json[portBpixMode]
-          ) {
-            reboot = true;
-          }
-        }
-        ret = true;
-        break;
-      }
-      #endif
+      reboot = true;
+      ret = true;
+      break;
 
     case 4:     // Scenes
       // Not yet implemented
@@ -333,10 +280,10 @@ void ajaxLoad(uint8_t section, JsonObject jsonReply) {
 
 // type check ArduinoJson variant values
 bool sameType(JsonVariant value1, JsonVariant value2) {
-  if (  (value1.is<float>() && value2.is<float>()) ||
+  if (  (value1.is<float>() && value2.is<float>()) ||  // also does integers
         (value1.is<const char*>() && value2.is<const char*>()) ||
         (value1.is<bool>() && value2.is<bool>()) ||
-        (value1.is<JsonArray>() && value2.is<JsonArray>()) ||
+        (value1.is<JsonArray>() && value2.is<JsonArray>() && sameType(value1[0], value2[0])) ||
         (value1.is<JsonObject>() && value2.is<JsonObject>()) )
   {
     return true;
