@@ -64,29 +64,26 @@ void portSetup() {
   #else
     if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_OUT || (uint8_t)deviceSettings[portAmode] == TYPE_RDM_OUT) {
       setStatusLed(STATUS_LED_A, CRGB::Blue);
-  
-      dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]));
+
+      // invert enabled for boards with A channel on DMX pin 2
+      dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]), true);
       if ((uint8_t)deviceSettings[portAmode] == TYPE_RDM_OUT && !dmxA.rdmEnabled()) {
         dmxA.rdmEnable(ESTA_MAN, ESTA_DEV);
         dmxA.rdmSetCallBack(rdmReceivedA);
         dmxA.todSetCallBack(sendTodA);
       }
     } else if ((uint8_t)deviceSettings[portAmode] == TYPE_DMX_IN) {
-      #ifndef ESP_01
-        setStatusLed(STATUS_LED_A, CRGB::Teal);
-      #endif
+      setStatusLed(STATUS_LED_A, CRGB::Teal);
       
-      dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]));
+      dmxA.begin(DMX_DIR_A, artRDM.getDMX(portA[0], portA[1]), true);
       dmxA.dmxIn(true);
       dmxA.setInputCallback(dmxIn);
   
       dataIn = (byte*) os_zalloc(sizeof(byte) * 512);
-  
+
+    // LED modes
     } else {
-      #ifndef ESP_01
-        setStatusLed(STATUS_LED_A, CRGB::Green);
-      #endif
-  
+      setStatusLed(STATUS_LED_A, CRGB::Green);
       led_controller_A();
     }
   #endif
@@ -95,28 +92,24 @@ void portSetup() {
     if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_OUT || (uint8_t)deviceSettings[portBmode] == TYPE_RDM_OUT) {
       setStatusLed(STATUS_LED_B, CRGB::Blue);
       
-      dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]));
+      dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]), true);
       if ((uint8_t)deviceSettings[portBmode] == TYPE_RDM_OUT && !dmxB.rdmEnabled()) {
         dmxB.rdmEnable(ESTA_MAN, ESTA_DEV);
         dmxB.rdmSetCallBack(rdmReceivedB);
         dmxB.todSetCallBack(sendTodB);
       }
     } else if ((uint8_t)deviceSettings[portBmode] == TYPE_DMX_IN) {
-      #ifndef ESP_01
-        setStatusLed(STATUS_LED_B, CRGB::Teal);
-      #endif
+      setStatusLed(STATUS_LED_B, CRGB::Teal);
 
-      dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]));
+      dmxB.begin(DMX_DIR_B, artRDM.getDMX(portB[0], portB[1]), true);
       dmxB.dmxIn(true);
       dmxB.setInputCallback(dmxIn);
 
       dataIn = (byte*) os_zalloc(sizeof(byte) * 512);
 
+    // LED modes
     } else {
-      #ifndef ESP_01
-        setStatusLed(STATUS_LED_B, CRGB::Green);
-      #endif
-
+      setStatusLed(STATUS_LED_B, CRGB::Green);
       led_controller_B();
     }
   #endif

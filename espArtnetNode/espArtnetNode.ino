@@ -42,6 +42,29 @@
  *  DMX output - start frame takes 2.5ms, thereafter works on UART interrupts
  *  STATUS LED - 200usec
  *  WS2812 144 LED strip - 4.6ms
+ *  
+ *  Get info using: esptool.py --port /dev/cu.usbserial-AQ03LZ54 flash_id
+Detecting chip type... ESP8266
+Chip is ESP8266EX
+Features: WiFi
+Crystal is 26MHz
+MAC: 08:3a:f2:c4:43:ee
+Uploading stub...
+Running stub...
+Stub running...
+Manufacturer: 5e  Ai-Thinker?
+Device: 4016      ESP-12S?
+Detected flash size: 4MB (32Mbit)
+ *
+ *  ESP-12S arduino settings:
+ *  - Generic ESP8266 module
+ *  - Upload 460800
+ *  - CPU freq: 160MHz
+ *  - Crystal: 26MHz
+ *  - Flash: 4M (1M SPIFFS)
+ *  - Flash Mode: DOUT
+ *  - Flash freq: 80~MHz
+ *  - LED: IO2
  */
 
 /*
@@ -64,18 +87,27 @@
     Use json file as settings store instead of struct for sharing with website
     Fix compile warnings
     Redirect debug/exception logging to debug log & remove disable from DMX lib
+    Dump restart exception in format for exception decoder
+    Move to external DMX library & fix high-watermark bug
+    Add UART level invert feature
+    [TODO] Display port activity on LED
 
     # Next version 2:
     [TODO] Improve & extend FX library effects
     [TODO] Add port disable option
     [TODO] Update store to EEPROM_Rotate
     [TODO] Scene saving from FX library only
+    [TODO] Remove DMX In broadcast address (redundant) and swap for unicast address
 
-    # Version 3
+    # Would be awesome:
+    [TODO] websocket monitoring of live data to browser
+    [TODO] multicast with IGMP
+
+    # Version 3 - hardware change
     [TODO] Restyle website with bootstrap
     [TODO] HW: Support clocked LED strip types over single SPI bus - PortC
     [TODO] HW: Move port A to IO15 & IO13 to avoid bootloader output
-    [TODO] HW: Move LED ports to other IO pins as fixtures on the PortA/B DMX port
+    [TODO] HW: Move LED ports to other IO pins as separate fixtures on Artnet
 
     # Future major hardware upgrade?
     [TODO] HW Upgrade hardware to Wemos S2 mini / ESP32 S2
@@ -130,38 +162,38 @@ const char* FIRMWARE_VERSION = "v2.1.0";
 #define ESTA_DEV 0xEE000000  // RDM Device ID (used with Man Code to make 48bit UID)
 
 #ifdef ESP_01
-#define DMX_DIR_A 2   // Same pin as TX1
-#define DMX_TX_A 1
-#define ONE_PORT
-#define NO_RESET
-
-#define WS2812_ALLOW_INT_SINGLE false
-#define WS2812_ALLOW_INT_DOUBLE false
+  #define DMX_DIR_A 2   // Same pin as TX1
+  #define DMX_TX_A 1
+  #define ONE_PORT
+  #define NO_RESET
+  
+  #define WS2812_ALLOW_INT_SINGLE false
+  #define WS2812_ALLOW_INT_DOUBLE false
 
 #else
-#define DMX_DIR_A 5   // D1
-#define DMX_DIR_B 16  // D0
-#define DMX_TX_A 1
-#define DMX_TX_B 2
-
-//#define ONE_PORT  // Testing
-// Testing oscilloscope trigger pin
-#define TRIGGER 13  // MOSI must use this with any of below
-//#define TRIGGER_DMX_OUT
-#define TRIGGER_DMX_IN
-//#define TRIGGER_LEDS
-//#define TRIGGER_STATUS
-
-#define STATUS_LED_PIN 12
-#define STATUS_LED_MODE WS2812B
-//  #define STATUS_LED_MODE APA106
-#define STATUS_LED_A 0  // Physical wiring order for status LEDs
-#define STATUS_LED_B 1
-#define STATUS_LED_S 2
-#define NUM_STATUS_LEDS 3
-
-#define WS2812_ALLOW_INT_SINGLE false
-#define WS2812_ALLOW_INT_DOUBLE false
+  #define DMX_DIR_A 5   // D1
+  #define DMX_DIR_B 16  // D0
+  #define DMX_TX_A 1
+  #define DMX_TX_B 2
+  
+  //#define ONE_PORT  // Testing
+  // Testing oscilloscope trigger pin
+  #define TRIGGER 13  // MOSI must use this with any of below
+  #define TRIGGER_DMX_OUT
+  //#define TRIGGER_DMX_IN
+  //#define TRIGGER_LEDS
+  //#define TRIGGER_STATUS
+  
+  #define STATUS_LED_PIN 12
+  #define STATUS_LED_MODE WS2812B
+  //  #define STATUS_LED_MODE APA106
+  #define STATUS_LED_A 0  // Physical wiring order for status LEDs
+  #define STATUS_LED_B 1
+  #define STATUS_LED_S 2
+  #define NUM_STATUS_LEDS 3
+  
+  #define WS2812_ALLOW_INT_SINGLE false
+  #define WS2812_ALLOW_INT_DOUBLE false
 #endif
 
 #ifndef NO_RESET
@@ -326,13 +358,14 @@ void loop(void) {
 void handleReboot() {
   // don't reboot until save is complete
   if (doReboot && !doSave) {
-    char c[ARTNET_NODE_REPORT_LENGTH] = "Device rebooting...";
-    artRDM.setNodeReport(c, ARTNET_RC_POWER_OK);
+    const char msg[] = "Device rebooting...";
+    artRDM.setNodeReport(msg, ARTNET_RC_POWER_OK);
     artRDM.artPollReply();
     artRDM.end();
 
     // Turn pixel strips off if they're on
     stop_LEDs();
+    debugLog(LOG_INFO, "handleReboot", msg);
 
     // Ensure all web data is sent before we reboot
     delay(500);

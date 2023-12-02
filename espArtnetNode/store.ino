@@ -162,7 +162,7 @@ void save() {
     eepromSave();
     delay(10);
     log_meminfo("after_save");
-    //deviceSettings.garbageCollect();
+    deviceSettings.garbageCollect();
     // set last so reboot cannot happen before save completes
     doSave = false;
   }

@@ -223,8 +223,6 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
   if (portA[0] == group) {
     if ((uint8_t)deviceSettings[portAmode] >= LED_MODE_START) {
       
-      setStatusLed(STATUS_LED_A, CRGB::Green);
-      
       if ((uint8_t)deviceSettings[portApixMode] == FX_MODE_PIXEL_MAP) {
         if (numChans > 510)
           numChans = 510;
@@ -246,16 +244,12 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
     // DMX modes
     } else if ((uint8_t)deviceSettings[portAmode] != TYPE_DMX_IN && port == portA[1]) {
       dmxA.chanUpdate(numChans);
-      
-      setStatusLed(STATUS_LED_A, CRGB::Blue);
     }
       
 
   #ifndef ONE_PORT
   } else if (portB[0] == group) {
     if ((uint8_t)deviceSettings[portBmode] >= LED_MODE_START) {
-
-      setStatusLed(STATUS_LED_B, CRGB::Green);
       
       if ((uint8_t)deviceSettings[portBpixMode] == FX_MODE_PIXEL_MAP) {
         if (numChans > 510)
@@ -276,7 +270,6 @@ void dmxHandle(uint8_t group, uint8_t port, uint16_t numChans, bool syncEnabled)
       }
     } else if ((uint8_t)deviceSettings[portBmode] != TYPE_DMX_IN && port == portB[1]) {
       dmxB.chanUpdate(numChans);
-      setStatusLed(STATUS_LED_B, CRGB::Blue);
     }
   #endif
   }
