@@ -1,5 +1,15 @@
+# Deprecated
+Updated: 18 Jan 2024
+
+Having spent a while updating this project, I then found WLED!
+Go to https://github.com/Aircoookie/WLED/ if you want a much more mature and feature rich project that also works on the ESP32.
+
+WLED focuses on LED strips and pixel effects (even 2D matrices) which can be driven by sACN and ArtNet (amongst many other protocols!)
+but I have improved the DMX features and passthrough to/from ArtNet to support my boards.
+
+The only feature it doesn't have which is unlikely to be implemented from this project is DMX RDM. But it could be added in.
+
 ## My updates
-Updated: 26 Sep 2023
 
 My updates and todos are listed in the espArtnetNode main file.
 All credit goes to Matthew Tong for this excellent project, his original info is retained below.
@@ -13,6 +23,7 @@ Other board options:
 
  - Using the onboard FTDI chip, or a header, there is the option to either use it to program the ESP-12S module, or to drive DMX channel A directly, i.e. the board can also operate as a USB single channel isolated DMX interface without the ESP module
  - 2-channel headers for one-wire addressable LED strips instead of DMX
+ - A channel for clock/data addressable LED strips (e.g. APA102)
  - Protected 5V input for external PSU
  - Optional 6.3-12V compatible filtered and protected input with 5V regulator
 
